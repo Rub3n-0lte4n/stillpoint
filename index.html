@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#080510" />
+<title>FocusPoint · Couture Reader</title>
+<meta name="description" content="Stream PDFs and EPUBs through a single focal point. ORP, RSVP and Hybrid speed-reading, entirely in your browser." />
+
+<!-- Fonts: Fraunces (display serif) · Newsreader (reading) · Spline Sans (UI) -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<!-- In-browser parsers -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.93/epub.min.js"></script>
+
+<style>
+  :root{
+    --bg-0:#080510;
+    --bg-1:#0e0918;
+    --bg-2:#160d24;
+    --surface:rgba(28,18,42,0.55);
+    --surface-2:rgba(40,26,60,0.45);
+    --hair:rgba(200,170,255,0.12);
+    --hair-strong:rgba(200,170,255,0.22);
+    --ink:#efe9f6;
+    --ink-soft:#c4bcd4;
+    --ink-mute:#897f9e;
+    --amethyst:#c5a3ff;
+    --amethyst-deep:#8b5cf6;
+    --gold:#e6c587;
+    --rose:#f0a6c8;
+    --focus:#ffce5c;          /* ORP focal letter — luminous amber, max contrast on dark */
+    --focus-dim:#b9b1c9;       /* surrounding letters, softly dimmed so the focal letter leads */
+    --shadow:0 30px 80px -30px rgba(0,0,0,0.85);
+    --r-lg:22px;
+    --r-md:14px;
+    --r-sm:10px;
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:"Spline Sans",system-ui,sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 800px at 78% -10%, rgba(139,92,246,0.18), transparent 55%),
+      radial-gradient(1000px 700px at 10% 110%, rgba(230,166,200,0.10), transparent 50%),
+      linear-gradient(170deg, var(--bg-1), var(--bg-0) 60%, #050308);
+    background-attachment:fixed;
+    min-height:100vh;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* fine grain overlay for atmosphere */
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:0.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode:overlay;
+  }
+
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+
+  /* ---------- Header ---------- */
+  header.site{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:30px 0 10px;
+  }
+  .brand{display:flex;align-items:center;gap:13px;}
+  .brand .mark{
+    width:40px;height:40px;border-radius:50%;flex:none;position:relative;
+    background:radial-gradient(circle at 50% 50%, var(--amethyst) 0 22%, transparent 23%),
+               conic-gradient(from 210deg, var(--amethyst-deep), var(--rose), var(--gold), var(--amethyst-deep));
+    box-shadow:0 0 22px rgba(139,92,246,0.55), inset 0 0 0 1px rgba(255,255,255,0.18);
+  }
+  .brand h1{
+    font-family:"Fraunces",serif;font-weight:500;font-size:24px;letter-spacing:0.3px;line-height:1;
+  }
+  .brand h1 em{font-style:italic;color:var(--gold);font-weight:400;}
+  .brand small{display:block;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-mute);margin-top:5px;}
+  .privacy-pill{
+    font-size:12px;color:var(--ink-soft);border:1px solid var(--hair);
+    padding:8px 15px;border-radius:999px;background:var(--surface);backdrop-filter:blur(10px);
+    display:flex;align-items:center;gap:8px;
+  }
+  .privacy-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold);}
+
+  /* ---------- Landing ---------- */
+  .hero{text-align:center;padding:46px 0 26px;}
+  .hero h2{
+    font-family:"Fraunces",serif;font-weight:300;font-size:clamp(34px,6vw,62px);
+    line-height:1.05;letter-spacing:-0.5px;max-width:14ch;margin:0 auto;
+  }
+  .hero h2 em{font-style:italic;color:var(--amethyst);}
+  .hero p{
+    max-width:52ch;margin:22px auto 0;color:var(--ink-soft);font-size:17px;line-height:1.6;
+  }
+
+  .dropzone{
+    margin:40px auto 0;max-width:680px;border-radius:var(--r-lg);
+    border:1px dashed var(--hair-strong);background:var(--surface);backdrop-filter:blur(16px);
+    box-shadow:var(--shadow);padding:48px 40px;text-align:center;cursor:pointer;
+    transition:border-color .3s, transform .3s, box-shadow .3s, background .3s;position:relative;overflow:hidden;
+  }
+  .dropzone::before{
+    content:"";position:absolute;inset:0;background:
+      radial-gradient(420px 200px at 50% -40%, rgba(197,163,255,0.16), transparent 70%);
+    pointer-events:none;
+  }
+  .dropzone:hover{transform:translateY(-3px);border-color:var(--amethyst);box-shadow:0 40px 90px -30px rgba(139,92,246,0.5);}
+  .dropzone.drag{border-color:var(--gold);background:rgba(60,40,80,0.6);transform:scale(1.01);}
+  .dz-icon{
+    width:62px;height:62px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;
+    background:linear-gradient(150deg, rgba(139,92,246,0.35), rgba(230,166,200,0.18));
+    border:1px solid var(--hair-strong);
+  }
+  .dz-icon svg{width:30px;height:30px;stroke:var(--amethyst);fill:none;stroke-width:1.6;}
+  .dropzone h3{font-family:"Fraunces",serif;font-weight:400;font-size:23px;margin-bottom:8px;}
+  .dropzone .formats{margin-top:6px;color:var(--ink-mute);font-size:13.5px;letter-spacing:.4px;}
+  .dropzone .formats b{color:var(--gold);font-weight:500;}
+
+  .or-row{display:flex;align-items:center;gap:18px;max-width:680px;margin:26px auto 0;color:var(--ink-mute);font-size:12px;letter-spacing:2px;text-transform:uppercase;}
+  .or-row::before,.or-row::after{content:"";height:1px;flex:1;background:var(--hair);}
+
+  .paste-shell{max-width:680px;margin:22px auto 0;}
+  textarea#paste{
+    width:100%;min-height:130px;resize:vertical;border-radius:var(--r-md);
+    background:var(--surface);border:1px solid var(--hair);color:var(--ink);
+    padding:16px 18px;font-family:"Newsreader",serif;font-size:16px;line-height:1.6;
+    backdrop-filter:blur(10px);transition:border-color .25s;
+  }
+  textarea#paste:focus{outline:none;border-color:var(--amethyst);}
+  textarea#paste::placeholder{color:var(--ink-mute);font-style:italic;}
+  .paste-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:12px;}
+
+  /* recent library */
+  .recent{max-width:680px;margin:30px auto 0;}
+  .recent h4{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;text-align:center;}
+  .recent-list{display:flex;flex-direction:column;gap:9px;}
+  .recent-item{
+    display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:var(--r-sm);
+    background:var(--surface);border:1px solid var(--hair);cursor:pointer;transition:border-color .2s,transform .2s,background .2s;
+  }
+  .recent-item:hover{border-color:var(--amethyst);transform:translateX(3px);}
+  .recent-item .ri-type{font-size:10px;font-weight:600;letter-spacing:1px;padding:4px 8px;border-radius:6px;background:rgba(139,92,246,0.2);color:var(--amethyst);text-transform:uppercase;flex:none;}
+  .recent-item .ri-name{flex:1;font-size:14.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .recent-item .ri-prog{font-size:12.5px;color:var(--gold);font-variant-numeric:tabular-nums;flex:none;}
+  .recent-item .ri-x{flex:none;color:var(--ink-mute);font-size:16px;padding:2px 6px;border-radius:6px;}
+  .recent-item .ri-x:hover{color:var(--rose);background:rgba(240,166,200,0.12);}
+
+  /* buttons */
+  .btn{
+    font-family:inherit;font-size:14px;font-weight:500;letter-spacing:.3px;cursor:pointer;
+    border-radius:999px;padding:11px 22px;border:1px solid var(--hair-strong);
+    background:var(--surface-2);color:var(--ink);transition:all .22s;backdrop-filter:blur(8px);
+  }
+  .btn:hover{border-color:var(--amethyst);color:#fff;}
+  .btn.ghost{background:transparent;border-color:var(--hair);color:var(--ink-soft);}
+  .btn.ghost:hover{color:var(--ink);border-color:var(--hair-strong);}
+  .btn.gold{background:linear-gradient(135deg,var(--gold),#caa45f);color:#241a07;border:none;font-weight:600;}
+  .btn.gold:hover{filter:brightness(1.07);}
+
+  /* ---------- Parsing overlay ---------- */
+  .parsing{position:fixed;inset:0;display:none;place-items:center;z-index:50;background:rgba(8,5,16,0.86);backdrop-filter:blur(8px);}
+  .parsing.show{display:grid;}
+  .parsing-card{text-align:center;}
+  .parsing-card .ring{
+    width:74px;height:74px;border-radius:50%;margin:0 auto 22px;
+    border:3px solid rgba(197,163,255,0.18);border-top-color:var(--amethyst);
+    animation:spin 0.9s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .parsing-card h3{font-family:"Fraunces",serif;font-weight:400;font-size:22px;}
+  .parsing-card p{color:var(--ink-mute);margin-top:8px;font-size:14px;}
+  .parse-bar{width:280px;height:4px;border-radius:4px;background:rgba(255,255,255,0.08);margin:20px auto 0;overflow:hidden;}
+  .parse-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amethyst-deep),var(--gold));transition:width .25s;}
+
+  /* ---------- Reader ---------- */
+  .reader{display:none;flex-direction:column;min-height:100vh;}
+  .reader.show{display:flex;}
+
+  .reader-top{display:flex;align-items:center;justify-content:space-between;padding:22px 0 4px;gap:16px;}
+  .doc-title{display:flex;flex-direction:column;min-width:0;}
+  .doc-title .t{font-family:"Fraunces",serif;font-size:19px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46ch;}
+  .doc-title .meta{font-size:12px;color:var(--ink-mute);letter-spacing:.4px;margin-top:3px;}
+
+  /* the stage */
+  .stage-shell{flex:1;display:flex;align-items:center;justify-content:center;padding:20px 0;position:relative;}
+  .stage{
+    width:100%;max-width:880px;border-radius:var(--r-lg);position:relative;
+    background:
+      radial-gradient(700px 300px at 50% 50%, rgba(35,22,52,0.7), rgba(14,9,24,0.55));
+    border:1px solid var(--hair);box-shadow:var(--shadow);
+    padding:70px 30px;min-height:300px;display:flex;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+  /* focus guide ticks */
+  .stage .guide{position:absolute;left:50%;transform:translateX(-50%);width:2px;background:var(--focus);opacity:.55;box-shadow:0 0 10px rgba(255,206,92,0.5);}
+  .stage .guide.top{top:54px;height:20px;}
+  .stage .guide.bot{bottom:54px;height:20px;}
+  .stage .baseline{position:absolute;left:8%;right:8%;top:50%;height:1px;background:linear-gradient(90deg,transparent,var(--hair),transparent);}
+
+  .word{
+    font-family:"Newsreader",serif;font-weight:400;
+    font-size:min(var(--read-size,62px), 13vw);line-height:1;
+    display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;
+    width:100%;max-width:760px;letter-spacing:.5px;
+  }
+  .word .pre{text-align:right;color:var(--focus-dim);white-space:pre;}
+  .word .piv{
+    text-align:center;color:var(--focus);font-weight:500;padding:0 0.02em;white-space:pre;
+    text-shadow:0 0 18px rgba(255,206,92,0.65), 0 0 2px rgba(255,206,92,0.9);
+  }
+  .word .post{text-align:left;color:var(--focus-dim);white-space:pre;}
+  .word.plain{grid-template-columns:1fr;}
+  .word.plain .all{text-align:center;color:var(--ink);}
+  .word .piv.off{color:var(--ink);text-shadow:none;}
+
+  .stage .resting{color:var(--ink-mute);font-family:"Fraunces",serif;font-style:italic;font-size:26px;text-align:center;}
+
+  /* transport + controls dock */
+  .dock{
+    border-top:1px solid var(--hair);background:rgba(10,6,20,0.72);backdrop-filter:blur(18px);
+    padding:16px 0 calc(26px + env(safe-area-inset-bottom));position:sticky;bottom:0;
+  }
+  .scrub{display:flex;align-items:center;gap:14px;margin-bottom:16px;}
+  .scrub .time{font-size:12px;color:var(--ink-mute);font-variant-numeric:tabular-nums;flex:none;width:74px;}
+  .scrub .time.r{text-align:right;}
+  .track{flex:1;height:7px;border-radius:7px;background:rgba(255,255,255,0.07);position:relative;cursor:pointer;}
+  .track .fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:7px;background:linear-gradient(90deg,var(--amethyst-deep),var(--amethyst));}
+  .track .knob{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(197,163,255,0.3),0 2px 8px rgba(0,0,0,.5);}
+
+  .transport{display:flex;align-items:center;justify-content:center;gap:22px;margin-bottom:18px;}
+  .tbtn{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair);background:var(--surface-2);color:var(--ink-soft);transition:all .2s;}
+  .tbtn:hover{color:#fff;border-color:var(--amethyst);transform:translateY(-2px);}
+  .tbtn svg{width:20px;height:20px;fill:currentColor;}
+  .tbtn.play{width:70px;height:70px;background:linear-gradient(140deg,var(--amethyst),var(--amethyst-deep));border:none;color:#fff;box-shadow:0 12px 34px -8px rgba(139,92,246,0.7);}
+  .tbtn.play:hover{transform:translateY(-2px) scale(1.04);}
+  .tbtn.play svg{width:28px;height:28px;}
+
+  .controls{display:flex;flex-wrap:wrap;gap:14px 26px;align-items:center;justify-content:center;}
+  .ctrl{display:flex;flex-direction:column;gap:7px;}
+  .ctrl label{font-size:10.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--ink-mute);}
+  .seg{display:flex;border:1px solid var(--hair);border-radius:999px;overflow:hidden;background:var(--surface-2);}
+  .seg button{font-family:inherit;font-size:13px;color:var(--ink-soft);background:none;border:none;padding:8px 14px;cursor:pointer;transition:all .18s;}
+  .seg button.active{background:linear-gradient(135deg,var(--amethyst-deep),var(--amethyst));color:#fff;}
+  .seg button:not(.active):hover{color:var(--ink);}
+
+  .slider-ctrl{min-width:180px;}
+  .slider-row{display:flex;align-items:center;gap:10px;}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;background:rgba(255,255,255,0.12);width:140px;outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;box-shadow:0 0 0 4px rgba(230,197,135,0.22);}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;background:var(--gold);cursor:pointer;}
+  .val{font-size:13px;color:var(--gold);font-variant-numeric:tabular-nums;min-width:62px;}
+
+  select.nav-sel{
+    font-family:inherit;font-size:13px;color:var(--ink);background:var(--surface-2);
+    border:1px solid var(--hair);border-radius:999px;padding:8px 14px;cursor:pointer;max-width:220px;
+  }
+  select.nav-sel:focus{outline:none;border-color:var(--amethyst);}
+
+  .kbd-hint{text-align:center;color:var(--ink-mute);font-size:11.5px;letter-spacing:.4px;margin-top:14px;}
+  .kbd-hint kbd{font-family:"Spline Sans";background:rgba(255,255,255,0.06);border:1px solid var(--hair);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--ink-soft);margin:0 2px;}
+
+  footer.site{text-align:center;color:var(--ink-mute);font-size:12.5px;padding:34px 0 30px;letter-spacing:.3px;}
+  footer.site a{color:var(--ink-soft);text-decoration:none;border-bottom:1px solid var(--hair);}
+
+  .hidden{display:none !important;}
+
+  @media (max-width:680px){
+    .wrap{padding:0 16px;}
+    header.site{padding:20px 0 6px;}
+    .privacy-pill{display:none;}
+    .brand h1{font-size:21px;}
+    .hero{padding:30px 0 18px;}
+    .hero p{font-size:15.5px;}
+    .dropzone{padding:34px 22px;}
+    .or-row,.paste-shell,.recent{max-width:none;}
+
+    /* reader */
+    .reader-top{padding:16px 0 2px;}
+    .doc-title .t{max-width:52vw;font-size:16px;}
+    .stage{padding:46px 14px;min-height:220px;}
+    .stage .guide.top{top:40px;} .stage .guide.bot{bottom:40px;}
+
+    .transport{gap:18px;margin-bottom:14px;}
+    .dock{padding:12px 0 calc(14px + env(safe-area-inset-bottom));}
+    .scrub{gap:10px;margin-bottom:12px;}
+    .scrub .time{width:50px;font-size:11px;}
+
+    .controls{gap:16px 16px;}
+    .seg button{padding:11px 15px;}              /* ≥44px touch targets */
+    .ctrl.slider-ctrl{order:-1;flex-basis:100%;align-items:center;}
+    .ctrl.slider-ctrl .slider-row{width:100%;justify-content:center;}
+    input[type=range]{width:min(72vw,280px);}
+    select.nav-sel{max-width:150px;padding:11px 14px;}
+    .kbd-hint{display:none;}                       /* no hardware keyboard on touch */
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ LANDING ============ -->
+<div id="landing">
+  <div class="wrap">
+    <header class="site">
+      <div class="brand">
+        <div class="mark"></div>
+        <div>
+          <h1>Focus<em>Point</em></h1>
+          <small>Couture Reader</small>
+        </div>
+      </div>
+      <div class="privacy-pill"><span class="dot"></span>Runs entirely in your browser</div>
+    </header>
+
+    <section class="hero">
+      <h2>Read at the speed of <em>thought.</em></h2>
+      <p>Drop in a PDF or EPUB and let every word arrive at a single, still focal point — no eye movement, no scanning. Pure flow.</p>
+    </section>
+
+    <div class="dropzone" id="dropzone">
+      <div class="dz-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+      </div>
+      <h3>Drop a book or document here</h3>
+      <div class="formats">or click to browse · <b>PDF</b> &nbsp;·&nbsp; <b>EPUB</b></div>
+      <input type="file" id="fileInput" accept=".pdf,.epub,application/pdf,application/epub+zip" class="hidden" />
+    </div>
+
+    <div class="or-row">or paste text</div>
+    <div class="paste-shell">
+      <textarea id="paste" placeholder="Paste an article, essay, study notes — anything you want to read in flow…"></textarea>
+      <div class="paste-actions">
+        <button class="btn ghost" id="demoBtn">Load demo passage</button>
+        <button class="btn gold" id="pasteGo">Begin reading →</button>
+      </div>
+    </div>
+
+    <div class="recent hidden" id="recent">
+      <h4>Continue reading</h4>
+      <div class="recent-list" id="recentList"></div>
+    </div>
+
+    <footer class="site">
+      Your files never leave this device. Parsed and read locally, forever private. · <a href="#" id="aboutLink">How it works</a>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ PARSING ============ -->
+<div class="parsing" id="parsing">
+  <div class="parsing-card">
+    <div class="ring"></div>
+    <h3 id="parseTitle">Opening your book…</h3>
+    <p id="parseSub">Extracting text locally</p>
+    <div class="parse-bar"><i id="parseFill"></i></div>
+  </div>
+</div>
+
+<!-- ============ READER ============ -->
+<div class="reader" id="reader">
+  <div class="wrap" style="flex:1;display:flex;flex-direction:column;">
+    <div class="reader-top">
+      <div class="brand" style="cursor:pointer" id="homeBtn">
+        <div class="mark"></div>
+        <div><h1 style="font-size:19px">Focus<em>Point</em></h1></div>
+      </div>
+      <div class="doc-title" style="text-align:right;align-items:flex-end;">
+        <div class="t" id="docTitle">Untitled</div>
+        <div class="meta" id="docMeta">—</div>
+      </div>
+    </div>
+
+    <div class="stage-shell">
+      <div class="stage" id="stage">
+        <div class="guide top"></div>
+        <div class="baseline"></div>
+        <div class="guide bot"></div>
+        <div class="resting" id="resting">Press play to begin</div>
+        <div class="word hidden" id="word"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dock">
+    <div class="wrap">
+      <div class="scrub">
+        <div class="time" id="tElapsed">0:00</div>
+        <div class="track" id="track"><div class="fill" id="trackFill"></div><div class="knob" id="trackKnob"></div></div>
+        <div class="time r" id="tLeft">-0:00</div>
+      </div>
+
+      <div class="transport">
+        <div class="tbtn" id="backBtn" title="Back a sentence (←)"><svg viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7v4h9v6h-9z"/></svg></div>
+        <div class="tbtn play" id="playBtn" title="Play / Pause (Space)"><svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg></div>
+        <div class="tbtn" id="fwdBtn" title="Forward a sentence (→)"><svg viewBox="0 0 24 24"><path d="M13 5l7 7-7 7v-4H4v-6h9z"/></svg></div>
+      </div>
+
+      <div class="controls">
+        <div class="ctrl">
+          <label>Mode</label>
+          <div class="seg" id="modeSeg">
+            <button data-mode="orp" class="active">ORP</button>
+            <button data-mode="rsvp">RSVP</button>
+            <button data-mode="hybrid">Hybrid</button>
+          </div>
+        </div>
+
+        <div class="ctrl slider-ctrl">
+          <label>Speed · <span id="presetLabel">Focus</span></label>
+          <div class="slider-row">
+            <input type="range" id="wpm" min="150" max="800" step="10" value="400" />
+            <span class="val"><span id="wpmVal">400</span> wpm</span>
+          </div>
+        </div>
+
+        <div class="ctrl" id="chunkCtrl">
+          <label>Chunk</label>
+          <div class="seg" id="chunkSeg">
+            <button data-c="1" class="active">1</button>
+            <button data-c="2">2</button>
+            <button data-c="3">3</button>
+            <button data-c="4">4</button>
+          </div>
+        </div>
+
+        <div class="ctrl">
+          <label>Size</label>
+          <div class="seg" id="sizeSeg">
+            <button data-s="44">S</button>
+            <button data-s="62" class="active">M</button>
+            <button data-s="82">L</button>
+            <button data-s="104">XL</button>
+          </div>
+        </div>
+
+        <div class="ctrl">
+          <label>Navigate</label>
+          <select class="nav-sel" id="navSel"></select>
+        </div>
+      </div>
+
+      <div class="kbd-hint">
+        <kbd>Space</kbd> play/pause &nbsp; <kbd>←</kbd><kbd>→</kbd> sentence &nbsp; <kbd>↑</kbd><kbd>↓</kbd> speed &nbsp; <kbd>Esc</kbd> library
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+/* ---------------- state ---------------- */
+const S = {
+  tokens: [],          // [{w, end:boolean, pause:boolean}]
+  units: [],           // [{title, start}]  (chapters/pages)
+  index: 0,
+  playing: false,
+  mode: "orp",
+  chunk: 1,
+  wpm: 400,
+  size: 62,
+  title: "Untitled",
+  meta: "",
+  key: null,           // localStorage key for resume
+  timer: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
+
+/* ---------------- tokenizing ---------------- */
+// Split text into word tokens, flagging sentence ends + clause pauses for natural pacing.
+function tokenize(text){
+  const raw = text.replace(/\s+/g," ").trim();
+  if(!raw) return [];
+  const words = raw.split(" ");
+  return words.map(w => ({
+    w,
+    end: /[.!?…]["')\]]?$/.test(w),
+    pause: /[,;:—–)\]]["']?$/.test(w),
+  }));
+}
+
+/* ORP focus index for a word (ignoring leading punctuation) */
+function orpIndex(word){
+  const letters = word.replace(/[^A-Za-z0-9]/g,"");
+  const L = letters.length || word.length;
+  let i;
+  if(L<=1) i=0; else if(L<=5) i=1; else if(L<=9) i=2; else if(L<=13) i=3; else i=4;
+  // map back onto the actual word allowing for leading punctuation
+  let seen=0;
+  for(let k=0;k<word.length;k++){
+    if(/[A-Za-z0-9]/.test(word[k])){ if(seen===i) return k; seen++; }
+  }
+  return Math.min(i, word.length-1);
+}
+
+/* ---------------- rendering a frame ---------------- */
+function renderFrame(){
+  const wordEl = $("word"), rest = $("resting");
+  if(S.index>=S.tokens.length){ stop(); return; }
+  rest.classList.add("hidden");
+  wordEl.classList.remove("hidden");
+
+  const size = S.chunk;
+  const chunkTokens = S.tokens.slice(S.index, S.index+size);
+  const showOrp = (S.mode==="orp" || S.mode==="hybrid");
+
+  if(!showOrp){
+    // plain centered chunk
+    wordEl.className = "word plain";
+    wordEl.innerHTML = `<span class="all">${esc(chunkTokens.map(t=>t.w).join(" "))}</span>`;
+    return;
+  }
+
+  // pivot word: ORP -> the (only) word; Hybrid -> middle word
+  const pivotPos = S.mode==="hybrid" ? Math.floor((chunkTokens.length-1)/2) : 0;
+  const before = chunkTokens.slice(0,pivotPos).map(t=>t.w).join(" ");
+  const after  = chunkTokens.slice(pivotPos+1).map(t=>t.w).join(" ");
+  const pw = chunkTokens[pivotPos].w;
+  const oi = orpIndex(pw);
+
+  const preText  = (before?before+" ":"") + pw.slice(0,oi);
+  const pivChar  = pw[oi] || "";
+  const postText = pw.slice(oi+1) + (after?" "+after:"");
+
+  wordEl.className = "word";
+  wordEl.innerHTML =
+    `<span class="pre">${esc(preText)}</span>`+
+    `<span class="piv">${esc(pivChar)}</span>`+
+    `<span class="post">${esc(postText)}</span>`;
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+/* ---------------- playback loop ---------------- */
+function step(){
+  renderFrame();
+  const chunkTokens = S.tokens.slice(S.index, S.index+S.chunk);
+  if(chunkTokens.length===0){ stop(); return; }
+
+  // base ms per word, scaled by chunk
+  const perWord = 60000 / S.wpm;
+  let delay = perWord * chunkTokens.length;
+  // natural pauses on punctuation + longer words
+  const last = chunkTokens[chunkTokens.length-1];
+  if(last.end) delay += perWord*0.9;
+  else if(last.pause) delay += perWord*0.45;
+  const longest = Math.max(...chunkTokens.map(t=>t.w.length));
+  if(longest>8) delay += perWord*0.25;
+
+  S.index += S.chunk;
+  updateProgress();
+  saveProgress();
+
+  S.timer = setTimeout(()=>{ if(S.playing) step(); }, delay);
+}
+
+function play(){
+  if(S.tokens.length===0) return;
+  if(S.index>=S.tokens.length) S.index=0;
+  S.playing = true;
+  $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
+  step();
+}
+function pause(){
+  S.playing=false;
+  clearTimeout(S.timer);
+  $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
+  saveProgress();
+}
+function stop(){
+  pause();
+  $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
+}
+function toggle(){ S.playing ? pause() : play(); }
+
+/* ---------------- navigation ---------------- */
+function jumpTo(i){
+  S.index = Math.max(0, Math.min(i, S.tokens.length-1));
+  renderFrame(); updateProgress(); saveProgress();
+}
+function backSentence(){
+  let i = S.index-1;
+  while(i>0 && !S.tokens[i-1].end) i--;
+  // if already at a boundary, go to previous sentence start
+  if(i>=S.index-1){ i=S.index-2; while(i>0 && !S.tokens[i-1].end) i--; }
+  jumpTo(Math.max(0,i));
+}
+function fwdSentence(){
+  let i = S.index;
+  while(i<S.tokens.length && !S.tokens[i].end) i++;
+  jumpTo(Math.min(S.tokens.length-1, i+1));
+}
+
+/* ---------------- progress + scrubber ---------------- */
+function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
+function updateProgress(){
+  const total = S.tokens.length||1;
+  const pct = Math.min(100, (S.index/total)*100);
+  $("trackFill").style.width = pct+"%";
+  $("trackKnob").style.left = pct+"%";
+  const elapsedWords = S.index;
+  const leftWords = total - S.index;
+  $("tElapsed").textContent = fmt(elapsedWords/S.wpm*60);
+  $("tLeft").textContent = "-"+fmt(leftWords/S.wpm*60);
+  // sync nav dropdown to current unit
+  if(S.units.length>1){
+    let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=S.index) u=k; }
+    if($("navSel").selectedIndex!==u) $("navSel").selectedIndex=u;
+  }
+}
+
+/* ---------------- resume / library (localStorage) ---------------- */
+const LIB_KEY="fp_library_v1";
+function loadLib(){ try{return JSON.parse(localStorage.getItem(LIB_KEY))||[];}catch(e){return [];} }
+function saveLib(lib){ localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0,8))); }
+function saveProgress(){
+  if(!S.key) return;
+  const lib = loadLib().filter(x=>x.key!==S.key);
+  lib.unshift({key:S.key,title:S.title,type:S.meta.split(" ")[0]||"TEXT",index:S.index,total:S.tokens.length,ts:Date.now()});
+  saveLib(lib);
+}
+function renderLibrary(){
+  const lib = loadLib();
+  const box=$("recent"), list=$("recentList");
+  if(lib.length===0){ box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  list.innerHTML="";
+  lib.forEach(item=>{
+    const pct = item.total ? Math.round(item.index/item.total*100) : 0;
+    const el=document.createElement("div"); el.className="recent-item";
+    el.innerHTML=`<span class="ri-type">${esc(item.type||"TEXT")}</span>
+      <span class="ri-name">${esc(item.title)}</span>
+      <span class="ri-prog">${pct}%</span>
+      <span class="ri-x" title="Remove">✕</span>`;
+    el.querySelector(".ri-name").onclick=el.querySelector(".ri-type").onclick=el.querySelector(".ri-prog").onclick=()=>{
+      alert("To resume \""+item.title+"\", re-open the same file — your position is saved.");
+    };
+    el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); saveLib(loadLib().filter(x=>x.key!==item.key)); renderLibrary(); };
+    list.appendChild(el);
+  });
+}
+
+/* ---------------- loading a document ---------------- */
+function openReader(tokens, units, title, meta, key){
+  S.tokens=tokens; S.units=units&&units.length?units:[{title:"Start",start:0}];
+  S.title=title; S.meta=meta; S.key=key; S.index=0;
+  // resume?
+  const prior = loadLib().find(x=>x.key===key);
+  if(prior && prior.index>0 && prior.index<tokens.length) S.index=prior.index;
+
+  $("docTitle").textContent=title;
+  $("docMeta").textContent=meta;
+  // build nav dropdown
+  const sel=$("navSel"); sel.innerHTML="";
+  S.units.forEach((u,i)=>{ const o=document.createElement("option"); o.value=u.start; o.textContent=u.title; sel.appendChild(o); });
+  sel.onchange=()=>jumpTo(parseInt(sel.value,10));
+
+  $("landing").style.display="none";
+  $("reader").classList.add("show");
+  renderFrame(); updateProgress();
+  $("resting").classList.remove("hidden"); $("word").classList.add("hidden");
+}
+
+function goHome(){
+  pause();
+  $("reader").classList.remove("show");
+  $("landing").style.display="";
+  renderLibrary();
+}
+
+async function handleFile(file){
+  if(!file) return;
+  const name=file.name.replace(/\.(pdf|epub)$/i,"");
+  const ext=(file.name.split(".").pop()||"").toLowerCase();
+  const key = file.name+"::"+file.size;
+  showParse("Opening "+name+"…", "Extracting text locally");
+  try{
+    if(ext==="pdf"){
+      const {tokens,units,pages}=await parsePDF(file);
+      hideParse();
+      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key);
+    } else if(ext==="epub"){
+      const {tokens,units,chapters}=await parseEPUB(file);
+      hideParse();
+      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key);
+    } else {
+      hideParse(); alert("Please choose a PDF or EPUB file.");
+    }
+  }catch(err){
+    console.error(err); hideParse();
+    alert("Sorry — couldn't read that file.\n"+(err&&err.message?err.message:err));
+  }
+}
+
+function showParse(t,s){ $("parseTitle").textContent=t; $("parseSub").textContent=s; $("parseFill").style.width="0%"; $("parsing").classList.add("show"); }
+function setParse(p){ $("parseFill").style.width=Math.round(p*100)+"%"; }
+function hideParse(){ $("parsing").classList.remove("show"); }
+
+/* ---- PDF ---- */
+async function parsePDF(file){
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  const tokens=[]; const units=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const content=await page.getTextContent();
+    let pageText="";
+    let lastY=null;
+    for(const it of content.items){
+      // insert space/newline heuristics
+      const str=it.str;
+      if(lastY!==null && it.transform && Math.abs(it.transform[5]-lastY)>2) pageText+=" ";
+      pageText += str + (it.hasEOL?" ":"");
+      if(it.transform) lastY=it.transform[5];
+    }
+    units.push({title:`Page ${p}`, start:tokens.length});
+    const toks=tokenize(pageText);
+    for(const t of toks) tokens.push(t);
+    setParse(p/pdf.numPages);
+    if(p%5===0) await new Promise(r=>setTimeout(r)); // yield
+  }
+  if(tokens.length===0) throw new Error("This PDF has no extractable text (it may be scanned images).");
+  return {tokens,units,pages:pdf.numPages};
+}
+
+/* ---- EPUB ---- */
+async function parseEPUB(file){
+  const buf = await file.arrayBuffer();
+  const book = ePub(buf);
+  await book.ready;
+  const spine = book.spine.spineItems || [];
+  // map toc hrefs -> titles for nicer chapter names
+  let toc=[];
+  try{ const nav=await book.loaded.navigation; toc=nav.toc||[]; }catch(e){}
+  const titleFor=(href)=>{
+    const base=href.split("/").pop().split("#")[0];
+    const hit=toc.find(t=>t.href && t.href.split("/").pop().split("#")[0]===base);
+    return hit ? hit.label.trim() : null;
+  };
+  const tokens=[]; const units=[]; let chapters=0;
+  for(let i=0;i<spine.length;i++){
+    const item=spine[i];
+    try{
+      const doc=await item.load(book.load.bind(book));
+      const text=(doc && (doc.body? doc.body.textContent : doc.textContent)) || "";
+      item.unload();
+      const toks=tokenize(text);
+      if(toks.length>3){
+        chapters++;
+        units.push({title: titleFor(item.href)|| `Chapter ${chapters}`, start:tokens.length});
+        for(const t of toks) tokens.push(t);
+      }
+    }catch(e){ /* skip unreadable section */ }
+    setParse((i+1)/spine.length);
+    await new Promise(r=>setTimeout(r));
+  }
+  if(tokens.length===0) throw new Error("Couldn't extract text from this EPUB.");
+  return {tokens,units,chapters};
+}
+
+/* ---------------- demo passage ---------------- */
+const DEMO = `Reading is a curious act of magic. We take small marks arranged on a surface and, almost instantly, they bloom into meaning inside the mind. The eye does not glide smoothly across a line; it leaps, pauses, and leaps again, landing on a single point within each word before the brain assembles the rest. FocusPoint borrows that natural anchor. Instead of asking your eyes to chase the text, it brings each word to you and holds it at the very spot your attention already wants to rest. The result feels less like reading and more like remembering — as though the words were already there, waiting to be recognised. Try sliding the speed upward. You will be surprised how much faster you can read when your eyes are allowed to stay perfectly still.`;
+
+/* ---------------- wiring ---------------- */
+function setMode(m){
+  S.mode=m;
+  document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
+  const chunkCtrl=$("chunkCtrl");
+  if(m==="orp"){ S.chunk=1; chunkCtrl.style.opacity=.4; chunkCtrl.style.pointerEvents="none"; setChunkUI(1); }
+  else if(m==="hybrid"){ if(S.chunk<2) S.chunk=3; chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; setChunkUI(S.chunk);
+    document.querySelector('#chunkSeg button[data-c="1"]').style.display="none"; }
+  else { chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; document.querySelector('#chunkSeg button[data-c="1"]').style.display=""; setChunkUI(S.chunk); }
+  renderFrame();
+}
+function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
+function setWpm(v){
+  S.wpm=v; $("wpmVal").textContent=v; $("wpm").value=v;
+  let label="Custom"; let best=1e9;
+  PRESETS.forEach(([w,n])=>{ const d=Math.abs(w-v); if(d<best && d<=40){best=d;label=n;} });
+  $("presetLabel").textContent=label;
+  updateProgress();
+}
+function setSize(s){ S.size=s; document.documentElement.style.setProperty("--read-size",s+"px");
+  document.querySelectorAll("#sizeSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.s===s)); }
+
+document.addEventListener("DOMContentLoaded",()=>{
+  // dropzone
+  const dz=$("dropzone"), fi=$("fileInput");
+  dz.onclick=()=>fi.click();
+  fi.onchange=e=>handleFile(e.target.files[0]);
+  ["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag");}));
+  ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag");}));
+  dz.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; handleFile(f); });
+
+  // paste
+  $("pasteGo").onclick=()=>{
+    const txt=$("paste").value.trim();
+    if(!txt){ $("paste").focus(); return; }
+    const toks=tokenize(txt);
+    openReader(toks,[{title:"Pasted text",start:0}],"Pasted text",`TEXT · ${toks.length.toLocaleString()} words`,"paste::"+txt.length);
+  };
+  $("demoBtn").onclick=()=>{ $("paste").value=DEMO; };
+  $("aboutLink").onclick=(e)=>{e.preventDefault();$("paste").value=DEMO;$("paste").scrollIntoView({behavior:"smooth"});};
+
+  // transport
+  $("playBtn").onclick=toggle;
+  $("backBtn").onclick=backSentence;
+  $("fwdBtn").onclick=fwdSentence;
+  $("homeBtn").onclick=goHome;
+
+  // mode / chunk / size
+  document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+  document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk);renderFrame();});
+  document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
+  $("wpm").oninput=e=>setWpm(+e.target.value);
+
+  // scrubber
+  const track=$("track");
+  const scrubTo=(clientX)=>{ const r=track.getBoundingClientRect(); const p=Math.max(0,Math.min(1,(clientX-r.left)/r.width)); jumpTo(Math.round(p*(S.tokens.length-1))); };
+  let dragging=false;
+  track.addEventListener("mousedown",e=>{dragging=true;scrubTo(e.clientX);});
+  window.addEventListener("mousemove",e=>{if(dragging)scrubTo(e.clientX);});
+  window.addEventListener("mouseup",()=>dragging=false);
+  track.addEventListener("touchstart",e=>scrubTo(e.touches[0].clientX),{passive:true});
+  track.addEventListener("touchmove",e=>scrubTo(e.touches[0].clientX),{passive:true});
+
+  // keyboard
+  document.addEventListener("keydown",e=>{
+    if(!$("reader").classList.contains("show")) return;
+    if(e.target.tagName==="TEXTAREA"||e.target.tagName==="SELECT") return;
+    if(e.code==="Space"){e.preventDefault();toggle();}
+    else if(e.code==="ArrowLeft"){e.preventDefault();backSentence();}
+    else if(e.code==="ArrowRight"){e.preventDefault();fwdSentence();}
+    else if(e.code==="ArrowUp"){e.preventDefault();setWpm(Math.min(800,S.wpm+25));}
+    else if(e.code==="ArrowDown"){e.preventDefault();setWpm(Math.max(150,S.wpm-25));}
+    else if(e.code==="Escape"){goHome();}
+  });
+
+  // restore persisted UI prefs
+  try{
+    const prefs=JSON.parse(localStorage.getItem("fp_prefs")||"{}");
+    if(prefs.wpm) setWpm(prefs.wpm); if(prefs.size) setSize(prefs.size);
+    if(prefs.mode) setMode(prefs.mode);
+  }catch(e){}
+  setSize(S.size); setWpm(S.wpm);
+
+  renderLibrary();
+  window.addEventListener("beforeunload",()=>{
+    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode}));
+  });
+});
+</script>
+</body>
+</html>
