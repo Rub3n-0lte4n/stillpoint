@@ -6,7 +6,7 @@ A focal-point speed reader that streams **PDFs, EPUBs, and pasted text** through
 
 ## Features
 
-- **Load PDF & EPUB** by drag-drop or file picker — parsed locally with [pdf.js](https://mozilla.github.io/pdf.js/) and [epub.js](https://github.com/futurepress/epub.js). Also accepts pasted text.
+- **Load PDF & EPUB** by drag-drop or file picker — parsed locally with [pdf.js](https://mozilla.github.io/pdf.js/) and [JSZip](https://stuk.github.io/jszip/) (EPUBs are read straight from the OPF/spine). Also accepts pasted text.
 - **Three reading modes**
   - **ORP** — one word at a time with the optimal-recognition letter highlighted
   - **RSVP** — classic 1–4 word chunks flashed in place
