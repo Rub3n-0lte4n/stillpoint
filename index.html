@@ -114,6 +114,26 @@
   .support-pill svg{width:13px;height:13px;fill:#241a07;}
   .footer-support{color:var(--gold) !important;border-bottom-color:rgba(230,197,135,0.4) !important;}
 
+  /* ---- Support / donation section ---- */
+  .support-section{max-width:680px;margin:54px auto 0;text-align:center;}
+  .support-eyebrow{font-size:11px;letter-spacing:2.6px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:10px;}
+  .support-copy{color:var(--ink-soft);font-size:14.5px;line-height:1.6;max-width:48ch;margin:0 auto 22px;}
+  .tiers{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;align-items:stretch;}
+  .tier{
+    display:flex;flex-direction:column;align-items:center;gap:3px;min-width:112px;
+    padding:18px 20px;border-radius:var(--r-md);text-decoration:none;
+    background:var(--surface);border:1px solid var(--hair);color:var(--ink);
+    transition:border-color .2s, transform .2s, background .2s, box-shadow .2s;
+  }
+  .tier:hover{border-color:var(--gold);transform:translateY(-3px);background:var(--surface-2);box-shadow:0 14px 30px -16px rgba(230,197,135,0.55);}
+  .tier .emoji{font-size:24px;line-height:1;}
+  .tier .tier-label{font-size:13px;color:var(--ink-soft);margin-top:5px;}
+  .tier .tier-amt{font-family:"Fraunces",serif;font-size:19px;color:var(--gold);margin-top:1px;}
+  .tier.custom{flex-direction:row;align-items:center;justify-content:center;min-width:auto;background:transparent;border:none;color:var(--ink-soft);font-size:13.5px;padding:14px 10px;}
+  .tier.custom:hover{color:var(--gold);transform:none;background:transparent;box-shadow:none;}
+  .support-note{margin-top:22px;font-size:12.5px;color:var(--ink-mute);letter-spacing:.3px;}
+  .support-note .hh{color:var(--rose);}
+
   /* ---------- Landing ---------- */
   .hero{text-align:center;padding:46px 0 26px;}
   .hero h2{
@@ -377,6 +397,24 @@
       <div class="recent-list" id="recentList"></div>
     </div>
 
+    <section class="support-section">
+      <div class="support-eyebrow">Support Stillpoint</div>
+      <p class="support-copy">Stillpoint is free and always will be — no ads, no accounts, nothing tracked. If it helped you read, you can leave a tip. Every bit funds new features.</p>
+      <div class="tiers">
+        <a class="tier" href="https://donate.stripe.com/dRmbJ112c1hJcBzfWy7N601" target="_blank" rel="noopener noreferrer">
+          <span class="emoji">☕</span><span class="tier-label">Buy me a coffee</span><span class="tier-amt">$3</span>
+        </a>
+        <a class="tier" href="https://donate.stripe.com/9B6eVd12cf8z1WVcKm7N602" target="_blank" rel="noopener noreferrer">
+          <span class="emoji">📖</span><span class="tier-label">Buy me a book</span><span class="tier-amt">$7</span>
+        </a>
+        <a class="tier" href="https://donate.stripe.com/9B66oH26g7G7bxv11E7N603" target="_blank" rel="noopener noreferrer">
+          <span class="emoji">✨</span><span class="tier-label">Fund a feature</span><span class="tier-amt">$15</span>
+        </a>
+        <a class="tier custom" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Choose your own →</a>
+      </div>
+      <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you.</p>
+    </section>
+
     <footer class="site">
       Your files never leave this device. Parsed and read locally, forever private. · <a href="#" id="aboutLink">How it works</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
     </footer>
@@ -486,6 +524,34 @@
 <script>
 "use strict";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+/* ---------------- haptics ----------------
+   Inline, dependency-free reimplementation of the web-haptics API
+   (github.com/lochie/web-haptics, MIT) — vendored to keep the app a single
+   offline, CSP-locked file. Uses the Vibration API where available, and the
+   iOS Safari <input switch> toggle trick (the "clever workaround") elsewhere. */
+const Haptics = (()=>{
+  const patterns = { light:[12], success:[35,55,35], nudge:[55,35,18], error:[28,40,28,40,28], buzz:[200] };
+  const canVibrate = typeof navigator!=="undefined" && typeof navigator.vibrate==="function";
+  let iosToggle=null;
+  function ensureIOS(){
+    if(iosToggle || !document.body) return iosToggle;
+    const label=document.createElement("label");
+    label.setAttribute("aria-hidden","true");
+    label.style.cssText="position:absolute;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;";
+    const input=document.createElement("input");
+    input.type="checkbox"; input.setAttribute("switch",""); input.tabIndex=-1;
+    label.appendChild(input); document.body.appendChild(label);
+    iosToggle=label; return label;
+  }
+  function trigger(input="light"){
+    try{
+      if(canVibrate){ navigator.vibrate(Array.isArray(input)?input:(patterns[input]||patterns.light)); return; }
+      const t=ensureIOS(); if(t) t.click();   // iOS: toggling a system switch emits a haptic tick
+    }catch(e){ /* silently no-op on unsupported platforms */ }
+  }
+  return { trigger };
+})();
 
 /* ---------------- state ---------------- */
 const S = {
@@ -853,6 +919,12 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk);renderFrame();});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
+
+  // haptic feedback (subtle tap on controls, a richer cue on a donation tap)
+  document.querySelectorAll("#modeSeg button,#chunkSeg button,#sizeSeg button,#backBtn,#fwdBtn,#playBtn")
+    .forEach(b=>b.addEventListener("click",()=>Haptics.trigger("light")));
+  document.querySelectorAll(".tier,.support-pill,.footer-support")
+    .forEach(a=>a.addEventListener("click",()=>Haptics.trigger("success")));
 
   // scrubber
   const track=$("track");
