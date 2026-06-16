@@ -1,8 +1,8 @@
-# FocusPoint · Couture Reader
+# Stillpoint · Couture Reader
 
 A focal-point speed reader that streams **PDFs, EPUBs, and pasted text** through a single still point — no eye movement, no scanning. Everything runs **entirely in your browser**; files never leave your device.
 
-**[→ Open the live app](https://rub3n-0lte4n.github.io/focuspoint-reader/)**
+**[→ Open the live app](https://rub3n-0lte4n.github.io/stillpoint/)**
 
 ## Features
 
