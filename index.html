@@ -103,6 +103,16 @@
     display:flex;align-items:center;gap:8px;
   }
   .privacy-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold);}
+  .header-right{display:flex;align-items:center;gap:12px;}
+  .support-pill{
+    display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;letter-spacing:.2px;
+    color:#241a07;background:linear-gradient(135deg,var(--gold),#caa45f);border:none;
+    padding:8px 16px;border-radius:999px;text-decoration:none;cursor:pointer;
+    box-shadow:0 6px 18px -8px rgba(230,197,135,0.6);transition:filter .2s, transform .2s, box-shadow .2s;
+  }
+  .support-pill:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 10px 24px -8px rgba(230,197,135,0.7);}
+  .support-pill svg{width:13px;height:13px;fill:#241a07;}
+  .footer-support{color:var(--gold) !important;border-bottom-color:rgba(230,197,135,0.4) !important;}
 
   /* ---------- Landing ---------- */
   .hero{text-align:center;padding:46px 0 26px;}
@@ -330,7 +340,13 @@
           <small>Couture Reader</small>
         </div>
       </div>
-      <div class="privacy-pill"><span class="dot"></span>Runs entirely in your browser</div>
+      <div class="header-right">
+        <a class="support-pill" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.2C.4 8.6 2 5 5.5 5c2 0 3.4 1.1 4.5 2.6C11 6.1 12.5 5 14.5 5 18 5 19.6 8.6 22 11.8 19.5 16.4 12 21 12 21z"/></svg>
+          Support
+        </a>
+        <div class="privacy-pill"><span class="dot"></span>Runs entirely in your browser</div>
+      </div>
     </header>
 
     <section class="hero">
@@ -362,7 +378,7 @@
     </div>
 
     <footer class="site">
-      Your files never leave this device. Parsed and read locally, forever private. · <a href="#" id="aboutLink">How it works</a>
+      Your files never leave this device. Parsed and read locally, forever private. · <a href="#" id="aboutLink">How it works</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
     </footer>
   </div>
 </div>
