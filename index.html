@@ -7,15 +7,30 @@
 <title>FocusPoint · Couture Reader</title>
 <meta name="description" content="Stream PDFs and EPUBs through a single focal point. ORP, RSVP and Hybrid speed-reading, entirely in your browser." />
 
-<!-- Fonts: Fraunces (display serif) · Newsreader (reading) · Spline Sans (UI) -->
+<!-- Content Security Policy: lock script/style/connect to self + the pinned CDN + font hosts.
+     'unsafe-inline' is required for the single-file inline script/styles; see README security notes. -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com blob:;
+  worker-src blob:;
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src https://fonts.gstatic.com;
+  img-src 'self' data:;
+  connect-src 'self' https://cdnjs.cloudflare.com blob: data:;
+  object-src 'none';
+  base-uri 'self';
+  form-action 'self'" />
+<meta name="referrer" content="no-referrer" />
+
+<!-- Fonts: Fraunces (display serif) · Atkinson Hyperlegible (focal reading word) · Spline Sans (UI) -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 
-<!-- In-browser parsers -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.93/epub.min.js"></script>
+<!-- In-browser parsers (integrity-pinned, CORS-loaded) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.93/epub.min.js" integrity="sha384-ZSs6LKr2GoUPDyHrN+rCQgyHL1yUyok5xMniSrgeRG7rUvA6vTmxronM1eZOfjgz" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <style>
   :root{
@@ -129,7 +144,7 @@
   textarea#paste{
     width:100%;min-height:130px;resize:vertical;border-radius:var(--r-md);
     background:var(--surface);border:1px solid var(--hair);color:var(--ink);
-    padding:16px 18px;font-family:"Newsreader",serif;font-size:16px;line-height:1.6;
+    padding:16px 18px;font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-size:16px;line-height:1.6;
     backdrop-filter:blur(10px);transition:border-color .25s;
   }
   textarea#paste:focus{outline:none;border-color:var(--amethyst);}
@@ -204,14 +219,14 @@
   .stage .baseline{position:absolute;left:8%;right:8%;top:50%;height:1px;background:linear-gradient(90deg,transparent,var(--hair),transparent);}
 
   .word{
-    font-family:"Newsreader",serif;font-weight:400;
+    font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
     font-size:min(var(--read-size,62px), 13vw);line-height:1;
     display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;
     width:100%;max-width:760px;letter-spacing:.5px;
   }
   .word .pre{text-align:right;color:var(--focus-dim);white-space:pre;}
   .word .piv{
-    text-align:center;color:var(--focus);font-weight:500;padding:0 0.02em;white-space:pre;
+    text-align:center;color:var(--focus);font-weight:700;padding:0 0.02em;white-space:pre;
     text-shadow:0 0 18px rgba(255,206,92,0.65), 0 0 2px rgba(255,206,92,0.9);
   }
   .word .post{text-align:left;color:var(--focus-dim);white-space:pre;}
@@ -536,7 +551,7 @@ function renderFrame(){
     `<span class="piv">${esc(pivChar)}</span>`+
     `<span class="post">${esc(postText)}</span>`;
 }
-function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
 
 /* ---------------- playback loop ---------------- */
 function step(){
@@ -706,7 +721,8 @@ function hideParse(){ $("parsing").classList.remove("show"); }
 /* ---- PDF ---- */
 async function parsePDF(file){
   const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+  // isEvalSupported:false mitigates CVE-2024-4367 (arbitrary JS via crafted PDF font handling)
+  const pdf = await pdfjsLib.getDocument({data:buf, isEvalSupported:false}).promise;
   const tokens=[]; const units=[];
   for(let p=1;p<=pdf.numPages;p++){
     const page=await pdf.getPage(p);

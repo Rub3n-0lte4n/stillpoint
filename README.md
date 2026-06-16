@@ -29,3 +29,11 @@ python3 -m http.server 8765
 ## Privacy
 
 No accounts, no servers, no tracking. Your documents are read and parsed locally and never uploaded.
+
+## Security notes
+
+- **Subresource Integrity** — all CDN libraries are pinned with `integrity` (SHA-384) + `crossorigin`, so a tampered CDN response is rejected.
+- **CVE-2024-4367** — `pdf.js` is invoked with `isEvalSupported:false`, the official mitigation against arbitrary JS execution from a crafted PDF.
+- **Content-Security-Policy** — a `<meta>` CSP restricts scripts/styles/connections to `self`, the pinned CDN, and the Google Fonts hosts. Because the app ships as a single self-contained file, the inline script/styles require `'unsafe-inline'`; moving the JS to an external `app.js` would allow dropping it for stronger XSS protection.
+- **Untrusted document text** is HTML-escaped before rendering; EPUB content is parsed for text only (no script execution).
+- **Not settable on GitHub Pages**: HTTP response headers such as `Strict-Transport-Security` (github.io is HSTS-preloaded anyway) and `X-Frame-Options` / CSP `frame-ancestors` (ignored in `<meta>`) require a server. The app performs no sensitive actions, so clickjacking impact is negligible.
