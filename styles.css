@@ -207,17 +207,25 @@
     padding:70px 30px;min-height:300px;display:flex;align-items:center;justify-content:center;
     overflow:hidden;cursor:pointer;
   }
-  /* centred ribbon — current word's pivot snapped to centre & held still; neighbours dim for context */
+  /* centred ribbon — current word's pivot snapped to centre & held still; neighbours dim for context.
+     The static clip wrapper carries the edge-fade mask so neighbours dissolve into the background
+     instead of hard-clipping; the ribbon inside is what moves. */
+  .stage .ribbon-clip{
+    position:absolute;inset:0;overflow:hidden;pointer-events:none;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 20%,#000 80%,transparent 100%);
+            mask-image:linear-gradient(90deg,transparent 0,#000 20%,#000 80%,transparent 100%);
+  }
   .stage .ribbon{
-    position:absolute;top:50%;left:0;white-space:nowrap;pointer-events:none;
+    position:absolute;top:50%;left:0;white-space:nowrap;
     transform:translate(0,-50%);will-change:transform;
     font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
     font-size:min(var(--read-size,62px),13vw);line-height:1;letter-spacing:.5px;
   }
-  .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.26;}
-  .stage .ribbon .rw.on{opacity:1;}
+  .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.34;transition:opacity .2s ease;}
+  .stage .ribbon.playing .rw{opacity:.14;}          /* dim further while reading — less pull on the eye */
+  .stage .ribbon .rw.on{opacity:1 !important;}
   .stage .ribbon .rw.pivot .rpiv{color:var(--focus);font-weight:700;text-shadow:0 0 18px rgba(255,206,92,0.65),0 0 2px rgba(255,206,92,0.9);}
-  .stage .ribbon.no-ctx .rw:not(.on){opacity:0;}   /* context toggle off => only the current word shows */
+  .stage .ribbon.no-ctx .rw:not(.on){opacity:0 !important;}   /* context toggle off => only the current word shows */
   /* focus guide ticks */
   .stage .guide{position:absolute;left:50%;transform:translateX(-50%);width:2px;background:var(--focus);opacity:.55;box-shadow:0 0 10px rgba(255,206,92,0.5);}
   .stage .guide.top{top:54px;height:20px;}
@@ -304,8 +312,15 @@
     /* reader */
     .reader-top{padding:16px 0 2px;}
     .doc-title .t{max-width:52vw;font-size:16px;}
-    .stage{padding:46px 14px;min-height:220px;}
+    .stage{padding:46px 14px;min-height:230px;}
     .stage .guide.top{top:40px;} .stage .guide.bot{bottom:40px;}
+    /* tighter words + a sooner edge-fade so neighbours stay subtle hints on a narrow screen */
+    .stage .ribbon{font-size:min(var(--read-size,62px),12vw);}
+    .stage .ribbon .rw{padding:0 .3em;}
+    .stage .ribbon-clip{
+      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 28%,#000 72%,transparent 100%);
+              mask-image:linear-gradient(90deg,transparent 0,#000 28%,#000 72%,transparent 100%);
+    }
 
     .transport{gap:18px;margin-bottom:14px;}
     .dock{padding:12px 0 calc(14px + env(safe-area-inset-bottom));}

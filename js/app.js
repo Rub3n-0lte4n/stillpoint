@@ -76,6 +76,7 @@ function render(){
   $("word").classList.add("hidden");
   const rb=$("ribbon"); rb.classList.remove("hidden");
   rb.classList.toggle("no-ctx", !settings.context);
+  rb.classList.toggle("playing", S.playing);
   if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2) buildRibbon();
   centerRibbon();
 }
@@ -139,6 +140,7 @@ function pause(){
   S.playing=false;
   clearTimeout(S.timer);
   if(S.playStart){ S.readMs += Date.now()-S.playStart; S.playStart=null; }
+  $("ribbon").classList.remove("playing");   // brighten neighbours for orientation while paused
   $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
   $("playBtn").setAttribute("aria-label","Play");
   saveProgress();
