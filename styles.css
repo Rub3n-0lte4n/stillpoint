@@ -207,16 +207,14 @@
     padding:70px 30px;min-height:300px;display:flex;align-items:center;justify-content:center;
     overflow:hidden;cursor:pointer;
   }
-  /* dimmed current sentence beneath the focal word — keeps comprehension/context */
+  /* a few neighbouring words beneath the focal word — a glimpse back and ahead, current in the middle */
   .stage .context{
-    position:absolute;left:7%;right:7%;bottom:34px;text-align:center;pointer-events:none;
-    font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-size:17px;line-height:1.7;
-    color:var(--ink-mute);max-height:5.1em;overflow:hidden;
-    -webkit-mask-image:linear-gradient(180deg,#000 58%,transparent);mask-image:linear-gradient(180deg,#000 58%,transparent);
-    transition:opacity .3s;
+    position:absolute;left:0;right:0;bottom:42px;text-align:center;pointer-events:none;
+    font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-size:18px;letter-spacing:.3px;
+    white-space:nowrap;overflow:hidden;padding:0 6%;
   }
-  .stage .context .cw{transition:color .15s;}
-  .stage .context .cw.on{color:var(--ink);}   /* current word, brighter, to map the flash to its place */
+  .stage .context .cw{color:var(--ink-mute);opacity:.5;transition:opacity .15s,color .15s;}
+  .stage .context .cw.on{color:var(--ink);opacity:1;}   /* the current word, anchored in the middle */
   /* focus guide ticks */
   .stage .guide{position:absolute;left:50%;transform:translateX(-50%);width:2px;background:var(--focus);opacity:.55;box-shadow:0 0 10px rgba(255,206,92,0.5);}
   .stage .guide.top{top:54px;height:20px;}

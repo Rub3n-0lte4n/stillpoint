@@ -27,30 +27,24 @@ const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const REWIND_WORDS = 5;   // back up on resume for re-orientation
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
+const CTX_WINDOW = 1;     // neighbouring words shown on each side of the focal word
+const settings = { countdown:true, context:true };  // reading aids (persisted)
 
 /* ---------------- context line ----------------
-   Shows the sentence the current word belongs to, dimmed beneath the focal word,
-   with the current word(s) brightened — so fast reading keeps its bearings. */
-let ctxRange = null;
-function sentenceRange(i){
-  let s=i; while(s>0 && !S.tokens[s-1].end) s--;
-  let e=i; while(e<S.tokens.length-1 && !S.tokens[e].end) e++;
-  return {s,e};
-}
+   A short glimpse of the neighbouring words — a couple before and after the focal
+   word, current word anchored bright in the middle — so fast reading keeps its bearings. */
 function updateContext(){
   const ctx=$("context");
   if(!ctx) return;
-  if(S.index>=S.tokens.length){ ctx.classList.add("hidden"); return; }
-  const r=sentenceRange(S.index);
-  if(!ctxRange || r.s!==ctxRange.s || r.e!==ctxRange.e){   // rebuild only when the sentence changes
-    let html="";
-    for(let k=r.s;k<=r.e;k++) html+=`<span class="cw" data-i="${k}">${esc(S.tokens[k].w)}</span> `;
-    ctx.innerHTML=html;
-    ctxRange=r;
+  if(!settings.context || S.index>=S.tokens.length){ ctx.classList.add("hidden"); return; }
+  const lo=Math.max(0, S.index-CTX_WINDOW);
+  const hi=Math.min(S.tokens.length-1, S.index+S.chunk-1+CTX_WINDOW);
+  let html="";
+  for(let k=lo;k<=hi;k++){
+    const cur = (k>=S.index && k<=S.index+S.chunk-1);
+    html += `<span class="cw${cur?" on":""}">${esc(S.tokens[k].w)}</span> `;
   }
-  ctx.querySelectorAll(".cw.on").forEach(el=>el.classList.remove("on"));
-  const last=Math.min(S.index+S.chunk-1, r.e);
-  for(let k=S.index;k<=last;k++){ const el=ctx.querySelector(`.cw[data-i="${k}"]`); if(el) el.classList.add("on"); }
+  ctx.innerHTML=html;
   ctx.classList.remove("hidden");
 }
 
@@ -116,7 +110,13 @@ function play(){
   $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
   $("playBtn").setAttribute("aria-label","Pause");
   updateProgress();
-  countdownThenStep();
+  if(settings.countdown){
+    countdownThenStep();
+  } else {
+    $("resting").classList.add("hidden"); $("word").classList.remove("hidden");
+    S.rampStart = S.index; S.playStart = Date.now();
+    step();
+  }
 }
 // 3·2·1 countdown before streaming, so you can settle into the focal point.
 function countdownThenStep(){
@@ -267,7 +267,7 @@ function openReader(tokens, units, title, meta, key){
   $("reader").classList.add("show");
   renderFrame(); updateProgress();
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden");
-  ctxRange=null; $("context").classList.add("hidden");
+  $("context").classList.add("hidden");
   saveProgress(); // record the entry immediately so the recent library reflects it
 }
 
@@ -362,6 +362,12 @@ function setWpm(v){
 }
 function setSize(s){ S.size=s; document.documentElement.style.setProperty("--read-size",s+"px");
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.s===s)); }
+function applyAids(){
+  document.querySelectorAll("#aidSeg button").forEach(b=>{
+    const on=!!settings[b.dataset.aid];
+    b.classList.toggle("active",on); b.setAttribute("aria-pressed", on?"true":"false");
+  });
+}
 
 /* ---------------- wiring ---------------- */
 function init(){
@@ -404,6 +410,13 @@ function init(){
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
 
+  // reading-aid toggles (countdown / context line)
+  document.querySelectorAll("#aidSeg button").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.aid; settings[k]=!settings[k]; applyAids();
+    if(k==="context") updateContext();
+    Haptics.trigger("light");
+  });
+
   // haptics: subtle tap on controls, richer cue on a donation tap
   document.querySelectorAll("#modeSeg button,#chunkSeg button,#sizeSeg button,#backBtn,#fwdBtn,#playBtn")
     .forEach(b=>b.addEventListener("click",()=>Haptics.trigger("light")));
@@ -438,12 +451,14 @@ function init(){
     const prefs=JSON.parse(localStorage.getItem("fp_prefs")||"{}");
     if(prefs.wpm) setWpm(prefs.wpm); if(prefs.size) setSize(prefs.size);
     if(prefs.mode) setMode(prefs.mode);
+    if(typeof prefs.countdown==="boolean") settings.countdown=prefs.countdown;
+    if(typeof prefs.context==="boolean") settings.context=prefs.context;
   }catch(e){}
-  setSize(S.size); setWpm(S.wpm);
+  setSize(S.size); setWpm(S.wpm); applyAids();
 
   renderLibrary();
   window.addEventListener("beforeunload",()=>{
-    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode}));
+    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context}));
   });
 }
 
