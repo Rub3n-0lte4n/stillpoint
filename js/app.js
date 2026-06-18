@@ -18,9 +18,15 @@ const S = {
   meta: "",
   key: null,           // localStorage key for resume
   timer: null,
+  readMs: 0,           // accumulated active reading time (excludes pauses)
+  playStart: null,     // wall-clock when the current run started streaming
+  rampStart: 0,        // token index where the current run began (for speed ramp)
 };
 const $ = (id) => document.getElementById(id);
 const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
+const REWIND_WORDS = 5;   // back up on resume for re-orientation
+const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
+const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
 
 /* ---------------- context line ----------------
    Shows the sentence the current word belongs to, dimmed beneath the focal word,
@@ -54,7 +60,7 @@ function updateContext(){
    pivot; RSVP keeps it uncoloured but still position-locked. */
 function renderFrame(){
   const wordEl = $("word"), rest = $("resting");
-  if(S.index>=S.tokens.length){ stop(); return; }
+  if(S.index>=S.tokens.length){ return; }
   rest.classList.add("hidden");
   wordEl.classList.remove("hidden");
 
@@ -81,11 +87,15 @@ function renderFrame(){
 
 /* ---------------- playback loop ---------------- */
 function step(){
+  if(S.index>=S.tokens.length){ finish(); return; }   // reached the end
   renderFrame();
   const chunkTokens = S.tokens.slice(S.index, S.index+S.chunk);
-  if(chunkTokens.length===0){ stop(); return; }
 
-  const perWord = 60000 / S.wpm;
+  // gentle speed ramp: ease from RAMP_MIN up to full WPM over the first words of a run
+  const since = S.index - S.rampStart;
+  const ramp = Math.min(1, RAMP_MIN + (1-RAMP_MIN)*(since/RAMP_WORDS));
+  const perWord = 60000 / (S.wpm * ramp);
+
   let delay = perWord * chunkTokens.length;
   const last = chunkTokens[chunkTokens.length-1];
   if(last.end) delay += perWord*0.9;
@@ -101,20 +111,50 @@ function step(){
 function play(){
   if(S.tokens.length===0) return;
   if(S.index>=S.tokens.length) S.index=0;
+  if(S.index>0) S.index = Math.max(0, S.index - REWIND_WORDS);  // rewind for re-orientation
   S.playing = true;
   $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
   $("playBtn").setAttribute("aria-label","Pause");
-  step();
+  updateProgress();
+  countdownThenStep();
+}
+// 3·2·1 countdown before streaming, so you can settle into the focal point.
+function countdownThenStep(){
+  const wordEl = $("word");
+  $("resting").classList.add("hidden"); wordEl.classList.remove("hidden");
+  updateContext();   // preview the sentence you're about to read
+  let n = 3;
+  const tick = ()=>{
+    if(!S.playing) return;            // cancelled (user paused)
+    if(n===0){ S.rampStart = S.index; S.playStart = Date.now(); step(); return; }
+    wordEl.className = "word countdown";
+    wordEl.innerHTML = `<span class="cd">${n}</span>`;
+    n--;
+    S.timer = setTimeout(tick, 300);
+  };
+  tick();
 }
 function pause(){
   S.playing=false;
   clearTimeout(S.timer);
+  if(S.playStart){ S.readMs += Date.now()-S.playStart; S.playStart=null; }
   $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
   $("playBtn").setAttribute("aria-label","Play");
   saveProgress();
 }
-function stop(){ pause(); $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>'; }
 function toggle(){ S.playing ? pause() : play(); }
+// Reached the end — show the session summary.
+function finish(){
+  pause();
+  const words = S.tokens.length;
+  const mins = S.readMs/60000;
+  const avg = mins>0.05 ? Math.round(words/mins) : S.wpm;
+  $("stWords").textContent = words.toLocaleString();
+  $("stTime").textContent = fmt(S.readMs/1000);
+  $("stWpm").textContent = avg.toLocaleString();
+  $("doneSub").textContent = `You finished “${S.title}”.`;
+  $("done").classList.add("show");
+}
 
 /* ---------------- navigation ---------------- */
 function jumpTo(i){
@@ -149,6 +189,25 @@ function updateProgress(){
   }
 }
 
+/* ---------------- toasts (non-blocking, on-brand feedback) ---------------- */
+function toast(msg, {action, onAction, duration=4500, error=false}={}){
+  const wrap=$("toasts");
+  const el=document.createElement("div");
+  el.className="toast"+(error?" err":"");
+  el.setAttribute("role","status");
+  const m=document.createElement("span"); m.className="tmsg"; m.textContent=msg; el.appendChild(m);
+  let timer;
+  const dismiss=()=>{ clearTimeout(timer); if(!el.isConnected) return; el.classList.add("hide"); setTimeout(()=>el.remove(),240); };
+  if(action){
+    const b=document.createElement("button"); b.type="button"; b.className="taction"; b.textContent=action;
+    b.onclick=()=>{ try{ onAction&&onAction(); } finally{ dismiss(); } };
+    el.appendChild(b);
+  }
+  wrap.appendChild(el);
+  timer=setTimeout(dismiss, duration);
+  return dismiss;
+}
+
 /* ---------------- resume / library (localStorage) ---------------- */
 const LIB_KEY="fp_library_v1";
 function loadLib(){ try{return JSON.parse(localStorage.getItem(LIB_KEY))||[];}catch(e){return [];} }
@@ -173,15 +232,28 @@ function renderLibrary(){
       <span class="ri-prog">${pct}%</span>
       <span class="ri-x" title="Remove">✕</span>`;
     el.querySelector(".ri-name").onclick=el.querySelector(".ri-type").onclick=el.querySelector(".ri-prog").onclick=()=>openFromStore(item);
-    el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); Store.del(item.key).catch(()=>{}); saveLib(loadLib().filter(x=>x.key!==item.key)); renderLibrary(); };
+    el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); removeItem(item); };
     list.appendChild(el);
   });
+}
+// Remove a library item, but defer deleting the cached file so "Undo" can restore it.
+function removeItem(item){
+  saveLib(loadLib().filter(x=>x.key!==item.key));
+  renderLibrary();
+  let undone=false;
+  const del=setTimeout(()=>{ if(!undone) Store.del(item.key).catch(()=>{}); }, 5200);
+  toast(`Removed “${item.title}”`, { action:"Undo", duration:5000, onAction:()=>{
+    undone=true; clearTimeout(del);
+    const lib=loadLib(); if(!lib.some(x=>x.key===item.key)){ lib.unshift(item); saveLib(lib); }
+    renderLibrary();
+  }});
 }
 
 /* ---------------- loading a document ---------------- */
 function openReader(tokens, units, title, meta, key){
   S.tokens=tokens; S.units=units&&units.length?units:[{title:"Start",start:0}];
   S.title=title; S.meta=meta; S.key=key; S.index=0;
+  S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   const prior = loadLib().find(x=>x.key===key);
   if(prior && prior.index>0 && prior.index<tokens.length) S.index=prior.index;
 
@@ -215,7 +287,7 @@ async function pruneStore(){
 async function openFromStore(item){
   let rec;
   try{ rec = await Store.get(item.key); }catch(e){}
-  if(!rec){ alert("\""+item.title+"\" isn't stored on this device anymore. Open the file once and it'll be remembered."); return; }
+  if(!rec){ toast(`“${item.title}” isn't on this device anymore — open it once to remember it.`); return; }
   if(rec.kind==="text"){
     const toks=tokenize(rec.text);
     openReader(toks,[{title:"Pasted text",start:0}],item.title,`TEXT · ${toks.length.toLocaleString()} words`,item.key);
@@ -230,10 +302,11 @@ async function openFromStore(item){
       const {tokens,units,chapters}=await parseEPUB(rec.blob, setParse);
       hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key);
     }
-  }catch(err){ hideParse(); alert("Couldn't reopen that file.\n"+(err&&err.message?err.message:err)); }
+  }catch(err){ hideParse(); toast("Couldn't reopen that file — "+(err&&err.message?err.message:err), {error:true}); }
 }
 function goHome(){
   pause();
+  $("done").classList.remove("show");
   $("reader").classList.remove("show");
   $("landing").style.display="";
   renderLibrary();
@@ -257,11 +330,11 @@ async function handleFile(file){
       openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key);
       persist(key,{kind:"epub",blob:file,name:file.name});
     } else {
-      hideParse(); alert("Please choose a PDF or EPUB file.");
+      hideParse(); toast("Please choose a PDF or EPUB file.");
     }
   }catch(err){
     console.error(err); hideParse();
-    alert("Sorry — couldn't read that file.\n"+(err&&err.message?err.message:err));
+    toast("Couldn't read that file — "+(err&&err.message?err.message:err), {error:true});
   }
 }
 function showParse(t,s){ $("parseTitle").textContent=t; $("parseSub").textContent=s; $("parseFill").style.width="0%"; $("parsing").classList.add("show"); }
@@ -318,6 +391,13 @@ function init(){
   $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); goHome(); }});
   // tap the reading area to play/pause (large, mobile-friendly target)
   $("stage").addEventListener("click",()=>{ toggle(); Haptics.trigger("light"); });
+
+  // session-complete screen
+  $("doneAgain").onclick=()=>{ $("done").classList.remove("show"); S.index=0; S.readMs=0; play(); };
+  $("doneLib").onclick=goHome;
+
+  // auto-pause when the tab/window is hidden so you don't lose your place
+  document.addEventListener("visibilitychange",()=>{ if(document.hidden && S.playing) pause(); });
 
   document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk);renderFrame();});
