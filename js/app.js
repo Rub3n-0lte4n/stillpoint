@@ -22,6 +22,32 @@ const S = {
 const $ = (id) => document.getElementById(id);
 const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 
+/* ---------------- context line ----------------
+   Shows the sentence the current word belongs to, dimmed beneath the focal word,
+   with the current word(s) brightened — so fast reading keeps its bearings. */
+let ctxRange = null;
+function sentenceRange(i){
+  let s=i; while(s>0 && !S.tokens[s-1].end) s--;
+  let e=i; while(e<S.tokens.length-1 && !S.tokens[e].end) e++;
+  return {s,e};
+}
+function updateContext(){
+  const ctx=$("context");
+  if(!ctx) return;
+  if(S.index>=S.tokens.length){ ctx.classList.add("hidden"); return; }
+  const r=sentenceRange(S.index);
+  if(!ctxRange || r.s!==ctxRange.s || r.e!==ctxRange.e){   // rebuild only when the sentence changes
+    let html="";
+    for(let k=r.s;k<=r.e;k++) html+=`<span class="cw" data-i="${k}">${esc(S.tokens[k].w)}</span> `;
+    ctx.innerHTML=html;
+    ctxRange=r;
+  }
+  ctx.querySelectorAll(".cw.on").forEach(el=>el.classList.remove("on"));
+  const last=Math.min(S.index+S.chunk-1, r.e);
+  for(let k=S.index;k<=last;k++){ const el=ctx.querySelector(`.cw[data-i="${k}"]`); if(el) el.classList.add("on"); }
+  ctx.classList.remove("hidden");
+}
+
 /* ---------------- rendering a frame ----------------
    Every mode anchors on a single pivot letter held dead-centre (grid: 1fr auto 1fr),
    so the word never shifts horizontally as its length changes. ORP/Hybrid colour the
@@ -50,6 +76,7 @@ function renderFrame(){
     `<span class="pre">${esc(preText)}</span>`+
     `<span class="piv${highlight?"":" off"}">${esc(pivChar)}</span>`+
     `<span class="post">${esc(postText)}</span>`;
+  updateContext();
 }
 
 /* ---------------- playback loop ---------------- */
@@ -76,12 +103,14 @@ function play(){
   if(S.index>=S.tokens.length) S.index=0;
   S.playing = true;
   $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
+  $("playBtn").setAttribute("aria-label","Pause");
   step();
 }
 function pause(){
   S.playing=false;
   clearTimeout(S.timer);
   $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
+  $("playBtn").setAttribute("aria-label","Play");
   saveProgress();
 }
 function stop(){ pause(); $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>'; }
@@ -111,6 +140,7 @@ function updateProgress(){
   const pct = Math.min(100, (S.index/total)*100);
   $("trackFill").style.width = pct+"%";
   $("trackKnob").style.left = pct+"%";
+  const tk=$("track"); tk.setAttribute("aria-valuenow", Math.round(pct)); tk.setAttribute("aria-valuetext", Math.round(pct)+"% read");
   $("tElapsed").textContent = fmt(S.index/S.wpm*60);
   $("tLeft").textContent = "-"+fmt((total-S.index)/S.wpm*60);
   if(S.units.length>1){
@@ -165,6 +195,7 @@ function openReader(tokens, units, title, meta, key){
   $("reader").classList.add("show");
   renderFrame(); updateProgress();
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden");
+  ctxRange=null; $("context").classList.add("hidden");
   saveProgress(); // record the entry immediately so the recent library reflects it
 }
 
@@ -263,6 +294,7 @@ function setSize(s){ S.size=s; document.documentElement.style.setProperty("--rea
 function init(){
   const dz=$("dropzone"), fi=$("fileInput");
   dz.onclick=()=>fi.click();
+  dz.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); fi.click(); }});
   fi.onchange=e=>handleFile(e.target.files[0]);
   ["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag");}));
   ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag");}));
@@ -283,6 +315,9 @@ function init(){
   $("backBtn").onclick=backSentence;
   $("fwdBtn").onclick=fwdSentence;
   $("homeBtn").onclick=goHome;
+  $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); goHome(); }});
+  // tap the reading area to play/pause (large, mobile-friendly target)
+  $("stage").addEventListener("click",()=>{ toggle(); Haptics.trigger("light"); });
 
   document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk);renderFrame();});
@@ -308,7 +343,8 @@ function init(){
   // keyboard
   document.addEventListener("keydown",e=>{
     if(!$("reader").classList.contains("show")) return;
-    if(e.target.tagName==="TEXTAREA"||e.target.tagName==="SELECT") return;
+    const tag=e.target.tagName;
+    if(tag==="TEXTAREA"||tag==="SELECT"||tag==="INPUT"||tag==="BUTTON"||e.target.getAttribute("role")==="button") return;
     if(e.code==="Space"){e.preventDefault();toggle();}
     else if(e.code==="ArrowLeft"){e.preventDefault();backSentence();}
     else if(e.code==="ArrowRight"){e.preventDefault();fwdSentence();}
