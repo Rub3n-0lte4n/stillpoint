@@ -2,6 +2,7 @@
 import { tokenize, orpIndex, esc, DEMO } from "./text.js";
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
+import { Store } from "./store.js";
 
 /* ---------------- state ---------------- */
 const S = {
@@ -141,10 +142,8 @@ function renderLibrary(){
       <span class="ri-name">${esc(item.title)}</span>
       <span class="ri-prog">${pct}%</span>
       <span class="ri-x" title="Remove">✕</span>`;
-    el.querySelector(".ri-name").onclick=el.querySelector(".ri-type").onclick=el.querySelector(".ri-prog").onclick=()=>{
-      alert("To resume \""+item.title+"\", re-open the same file — your position is saved.");
-    };
-    el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); saveLib(loadLib().filter(x=>x.key!==item.key)); renderLibrary(); };
+    el.querySelector(".ri-name").onclick=el.querySelector(".ri-type").onclick=el.querySelector(".ri-prog").onclick=()=>openFromStore(item);
+    el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); Store.del(item.key).catch(()=>{}); saveLib(loadLib().filter(x=>x.key!==item.key)); renderLibrary(); };
     list.appendChild(el);
   });
 }
@@ -166,6 +165,41 @@ function openReader(tokens, units, title, meta, key){
   $("reader").classList.add("show");
   renderFrame(); updateProgress();
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden");
+  saveProgress(); // record the entry immediately so the recent library reflects it
+}
+
+/* ---------------- local file cache (IndexedDB) ---------------- */
+// Persist a file/text so it can be reopened later without re-uploading; keep IDB in sync with the library.
+async function persist(key, rec){
+  try{ await Store.put(key, rec); await pruneStore(); }
+  catch(e){ /* storage unavailable or over quota — non-fatal, file just won't be remembered */ }
+}
+async function pruneStore(){
+  try{
+    const keep = new Set(loadLib().map(x=>x.key));
+    for(const k of await Store.keys()){ if(!keep.has(k)) await Store.del(k); }
+  }catch(e){}
+}
+// Reopen a recent item straight from the device.
+async function openFromStore(item){
+  let rec;
+  try{ rec = await Store.get(item.key); }catch(e){}
+  if(!rec){ alert("\""+item.title+"\" isn't stored on this device anymore. Open the file once and it'll be remembered."); return; }
+  if(rec.kind==="text"){
+    const toks=tokenize(rec.text);
+    openReader(toks,[{title:"Pasted text",start:0}],item.title,`TEXT · ${toks.length.toLocaleString()} words`,item.key);
+    return;
+  }
+  showParse("Opening "+item.title+"…","Reading from this device");
+  try{
+    if(rec.kind==="pdf"){
+      const {tokens,units,pages}=await parsePDF(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key);
+    } else {
+      const {tokens,units,chapters}=await parseEPUB(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key);
+    }
+  }catch(err){ hideParse(); alert("Couldn't reopen that file.\n"+(err&&err.message?err.message:err)); }
 }
 function goHome(){
   pause();
@@ -185,10 +219,12 @@ async function handleFile(file){
       const {tokens,units,pages}=await parsePDF(file, setParse);
       hideParse();
       openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key);
+      persist(key,{kind:"pdf",blob:file,name:file.name});
     } else if(ext==="epub"){
       const {tokens,units,chapters}=await parseEPUB(file, setParse);
       hideParse();
       openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key);
+      persist(key,{kind:"epub",blob:file,name:file.name});
     } else {
       hideParse(); alert("Please choose a PDF or EPUB file.");
     }
@@ -236,7 +272,9 @@ function init(){
     const txt=$("paste").value.trim();
     if(!txt){ $("paste").focus(); return; }
     const toks=tokenize(txt);
-    openReader(toks,[{title:"Pasted text",start:0}],"Pasted text",`TEXT · ${toks.length.toLocaleString()} words`,"paste::"+txt.length);
+    const key="paste::"+txt.length;
+    openReader(toks,[{title:"Pasted text",start:0}],"Pasted text",`TEXT · ${toks.length.toLocaleString()} words`,key);
+    persist(key,{kind:"text",text:txt});
   };
   $("demoBtn").onclick=()=>{ $("paste").value=DEMO; };
   $("aboutLink").onclick=(e)=>{e.preventDefault();$("paste").value=DEMO;$("paste").scrollIntoView({behavior:"smooth"});};
