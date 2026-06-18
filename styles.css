@@ -221,11 +221,10 @@
     font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
     font-size:min(var(--read-size,62px),13vw);line-height:1;letter-spacing:.5px;
   }
-  .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.34;transition:opacity .2s ease;}
+  .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.34;}  /* no transition — instant word swap in every mode */
   .stage .ribbon.playing .rw{opacity:.14;}          /* dim further while reading — less pull on the eye */
   .stage .ribbon .rw.on{opacity:1 !important;}
   .stage .ribbon .rw.pivot .rpiv{color:var(--focus);font-weight:700;text-shadow:0 0 18px rgba(255,206,92,0.65),0 0 2px rgba(255,206,92,0.9);}
-  .stage .ribbon.no-ctx .rw{transition:none;}                 /* context off => clean instant flash, no crossfade */
   .stage .ribbon.no-ctx .rw:not(.on){opacity:0 !important;}   /* context toggle off => only the current word shows */
   /* focus guide ticks */
   .stage .guide{position:absolute;left:50%;transform:translateX(-50%);width:2px;background:var(--focus);opacity:.55;box-shadow:0 0 10px rgba(255,206,92,0.5);}
