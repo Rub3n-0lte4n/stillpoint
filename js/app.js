@@ -27,62 +27,67 @@ const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const REWIND_WORDS = 5;   // back up on resume for re-orientation
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
-const CTX_WINDOW = 1;     // neighbouring words shown on each side of the focal word
 const settings = { countdown:true, context:true };  // reading aids (persisted)
 
-/* ---------------- context line ----------------
-   A short glimpse of the neighbouring words — a couple before and after the focal
-   word, current word anchored bright in the middle — so fast reading keeps its bearings. */
-function updateContext(){
-  const ctx=$("context");
-  if(!ctx) return;
-  if(!settings.context || S.index>=S.tokens.length){ ctx.classList.add("hidden"); return; }
-  const lo=Math.max(0, S.index-CTX_WINDOW);
-  const hi=Math.min(S.tokens.length-1, S.index+S.chunk-1+CTX_WINDOW);
-  let html="";
-  for(let k=lo;k<=hi;k++){
-    const cur = (k>=S.index && k<=S.index+S.chunk-1);
-    html += `<span class="cw${cur?" on":""}">${esc(S.tokens[k].w)}</span> `;
-  }
-  ctx.innerHTML=html;
-  ctx.classList.remove("hidden");
+/* ---------------- flowing ribbon ----------------
+   One centred line of words. The pivot letter of the current word is held on the
+   focal point; neighbours sit dim on either side. Each step the ribbon eases left
+   so the next word's pivot glides into the centre. */
+let ribbonStart = 0, ribbonLast = -1, ribbonOffset = 0;
+
+function pivotWordIndex(){
+  const n = Math.min(S.chunk, S.tokens.length - S.index);
+  const pos = (S.mode==="orp") ? 0 : Math.floor((Math.max(1,n)-1)/2);
+  return S.index + pos;
 }
-
-/* ---------------- rendering a frame ----------------
-   Every mode anchors on a single pivot letter held dead-centre (grid: 1fr auto 1fr),
-   so the word never shifts horizontally as its length changes. ORP/Hybrid colour the
-   pivot; RSVP keeps it uncoloured but still position-locked. */
-function renderFrame(){
-  const wordEl = $("word"), rest = $("resting");
-  if(S.index>=S.tokens.length){ return; }
-  rest.classList.add("hidden");
-  wordEl.classList.remove("hidden");
-
-  const chunkTokens = S.tokens.slice(S.index, S.index+S.chunk);
-  if(chunkTokens.length===0) return;
+function buildRibbon(){
+  const start = Math.max(0, S.index - 4);
+  const end = Math.min(S.tokens.length-1, S.index + 14);
+  let html="";
+  for(let k=start;k<=end;k++){
+    const w = S.tokens[k].w, oi = orpIndex(w);
+    html += `<span class="rw" data-i="${k}"><span class="rpre">${esc(w.slice(0,oi))}</span>`+
+            `<span class="rpiv">${esc(w[oi]||"")}</span><span class="rpost">${esc(w.slice(oi+1))}</span></span>`;
+  }
+  const rb=$("ribbon"); rb.innerHTML=html; ribbonStart=start; ribbonLast=end;
+}
+// Slide the ribbon so the pivot word's focal letter sits at the stage centre.
+function centerRibbon(animate){
+  const rb=$("ribbon"), stage=$("stage");
+  rb.querySelectorAll(".rw.on, .rw.pivot").forEach(e=>e.classList.remove("on","pivot"));
   const highlight = (S.mode==="orp" || S.mode==="hybrid");
-
-  const pivotPos = (S.mode==="orp") ? 0 : Math.floor((chunkTokens.length-1)/2);
-  const before = chunkTokens.slice(0,pivotPos).map(t=>t.w).join(" ");
-  const after  = chunkTokens.slice(pivotPos+1).map(t=>t.w).join(" ");
-  const pw = chunkTokens[pivotPos].w;
-  const oi = orpIndex(pw);
-  const preText  = (before?before+" ":"") + pw.slice(0,oi);
-  const pivChar  = pw[oi] || "";
-  const postText = pw.slice(oi+1) + (after?" "+after:"");
-
-  wordEl.className = "word";
-  wordEl.innerHTML =
-    `<span class="pre">${esc(preText)}</span>`+
-    `<span class="piv${highlight?"":" off"}">${esc(pivChar)}</span>`+
-    `<span class="post">${esc(postText)}</span>`;
-  updateContext();
+  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
+  for(let k=S.index;k<endChunk;k++){ const el=rb.querySelector(`.rw[data-i="${k}"]`); if(el) el.classList.add("on"); }
+  const pwEl = rb.querySelector(`.rw[data-i="${pivotWordIndex()}"]`);
+  if(!pwEl) return;
+  if(highlight) pwEl.classList.add("pivot");
+  const pr = pwEl.querySelector(".rpiv").getBoundingClientRect();
+  const sr = stage.getBoundingClientRect();
+  const target = Math.round((ribbonOffset + (sr.left+sr.width/2) - (pr.left+pr.width/2))*100)/100;
+  const dur = Math.max(80, Math.min(220, (60000/Math.max(1,S.wpm))*0.7));
+  rb.style.transition = animate ? `transform ${dur}ms ease-out` : "none";
+  rb.style.transform = `translate(${target}px, -50%)`;
+  ribbonOffset = target;
+  if(!animate){ void rb.offsetWidth; rb.style.transition = `transform ${dur}ms ease-out`; }   // re-enable after reflow
+}
+// Show the current position in the ribbon (animate=true eases from the previous word).
+function render(animate){
+  if(!S.tokens.length || S.index>=S.tokens.length) return;
+  $("resting").classList.add("hidden");
+  $("word").classList.add("hidden");
+  const rb=$("ribbon"); rb.classList.remove("hidden");
+  rb.classList.toggle("no-ctx", !settings.context);
+  if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2){
+    buildRibbon(); centerRibbon(false);     // (re)build and snap into place
+  } else {
+    centerRibbon(animate);
+  }
 }
 
 /* ---------------- playback loop ---------------- */
 function step(){
   if(S.index>=S.tokens.length){ finish(); return; }   // reached the end
-  renderFrame();
+  render(true);
   const chunkTokens = S.tokens.slice(S.index, S.index+S.chunk);
 
   // gentle speed ramp: ease from RAMP_MIN up to full WPM over the first words of a run
@@ -122,7 +127,7 @@ function play(){
 function countdownThenStep(){
   const wordEl = $("word");
   $("resting").classList.add("hidden"); wordEl.classList.remove("hidden");
-  updateContext();   // preview the sentence you're about to read
+  $("ribbon").classList.add("hidden");
   let n = 3;
   const tick = ()=>{
     if(!S.playing) return;            // cancelled (user paused)
@@ -159,7 +164,7 @@ function finish(){
 /* ---------------- navigation ---------------- */
 function jumpTo(i){
   S.index = Math.max(0, Math.min(i, S.tokens.length-1));
-  renderFrame(); updateProgress(); saveProgress();
+  render(false); updateProgress(); saveProgress();
 }
 function backSentence(){
   let i = S.index-1;
@@ -265,9 +270,9 @@ function openReader(tokens, units, title, meta, key){
 
   $("landing").style.display="none";
   $("reader").classList.add("show");
-  renderFrame(); updateProgress();
-  $("resting").classList.remove("hidden"); $("word").classList.add("hidden");
-  $("context").classList.add("hidden");
+  ribbonStart=0; ribbonLast=-1; ribbonOffset=0;   // reset the ribbon for the new document
+  updateProgress();
+  $("resting").classList.remove("hidden"); $("word").classList.add("hidden"); $("ribbon").classList.add("hidden");
   saveProgress(); // record the entry immediately so the recent library reflects it
 }
 
@@ -350,7 +355,7 @@ function setMode(m){
   else if(m==="hybrid"){ if(S.chunk<2) S.chunk=3; chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; setChunkUI(S.chunk);
     document.querySelector('#chunkSeg button[data-c="1"]').style.display="none"; }
   else { chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; document.querySelector('#chunkSeg button[data-c="1"]').style.display=""; setChunkUI(S.chunk); }
-  renderFrame();
+  if(!$("ribbon").classList.contains("hidden")) render(false);   // re-centre if currently showing
 }
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
 function setWpm(v){
@@ -361,7 +366,9 @@ function setWpm(v){
   updateProgress();
 }
 function setSize(s){ S.size=s; document.documentElement.style.setProperty("--read-size",s+"px");
-  document.querySelectorAll("#sizeSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.s===s)); }
+  document.querySelectorAll("#sizeSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.s===s));
+  if(!$("ribbon").classList.contains("hidden")) render(false);   // re-centre at the new size
+}
 function applyAids(){
   document.querySelectorAll("#aidSeg button").forEach(b=>{
     const on=!!settings[b.dataset.aid];
@@ -406,14 +413,14 @@ function init(){
   document.addEventListener("visibilitychange",()=>{ if(document.hidden && S.playing) pause(); });
 
   document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
-  document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk);renderFrame();});
+  document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render(false);});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
 
   // reading-aid toggles (countdown / context line)
   document.querySelectorAll("#aidSeg button").forEach(b=>b.onclick=()=>{
     const k=b.dataset.aid; settings[k]=!settings[k]; applyAids();
-    if(k==="context") updateContext();
+    if(k==="context") $("ribbon").classList.toggle("no-ctx", !settings.context);
     Haptics.trigger("light");
   });
 
