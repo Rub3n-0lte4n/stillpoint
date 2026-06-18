@@ -62,7 +62,7 @@
       <p>Drop in a PDF or EPUB and let every word arrive at a single, still focal point — no eye movement, no scanning. Pure flow.</p>
     </section>
 
-    <div class="dropzone" id="dropzone">
+    <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Open a PDF or EPUB file">
       <div class="dz-icon">
         <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
       </div>
@@ -111,7 +111,7 @@
 
 <!-- ============ PARSING ============ -->
 <div class="parsing" id="parsing">
-  <div class="parsing-card">
+  <div class="parsing-card" role="status" aria-live="polite">
     <div class="ring"></div>
     <h3 id="parseTitle">Opening your book…</h3>
     <p id="parseSub">Extracting text locally</p>
@@ -123,7 +123,7 @@
 <div class="reader" id="reader">
   <div class="wrap" style="flex:1;display:flex;flex-direction:column;width:100%;">
     <div class="reader-top">
-      <div class="brand" style="cursor:pointer" id="homeBtn">
+      <div class="brand" style="cursor:pointer" id="homeBtn" role="button" tabindex="0" aria-label="Back to library">
         <div class="mark"></div>
         <div><h1 style="font-size:19px">Still<em>point</em></h1></div>
       </div>
@@ -134,12 +134,13 @@
     </div>
 
     <div class="stage-shell">
-      <div class="stage" id="stage">
+      <div class="stage" id="stage" title="Tap to play / pause">
         <div class="guide top"></div>
         <div class="baseline"></div>
         <div class="guide bot"></div>
-        <div class="resting" id="resting">Press play to begin</div>
-        <div class="word hidden" id="word"></div>
+        <div class="resting" id="resting">Tap to begin · or press space</div>
+        <div class="word hidden" id="word" aria-hidden="true"></div>
+        <div class="context hidden" id="context" aria-hidden="true"></div>
       </div>
     </div>
   </div>
@@ -148,14 +149,14 @@
     <div class="wrap">
       <div class="scrub">
         <div class="time" id="tElapsed">0:00</div>
-        <div class="track" id="track"><div class="fill" id="trackFill"></div><div class="knob" id="trackKnob"></div></div>
+        <div class="track" id="track" role="slider" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="trackFill"></div><div class="knob" id="trackKnob"></div></div>
         <div class="time r" id="tLeft">-0:00</div>
       </div>
 
       <div class="transport">
-        <div class="tbtn" id="backBtn" title="Back a sentence (←)"><svg viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7v4h9v6h-9z"/></svg></div>
-        <div class="tbtn play" id="playBtn" title="Play / Pause (Space)"><svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg></div>
-        <div class="tbtn" id="fwdBtn" title="Forward a sentence (→)"><svg viewBox="0 0 24 24"><path d="M13 5l7 7-7 7v-4H4v-6h9z"/></svg></div>
+        <button type="button" class="tbtn" id="backBtn" title="Back a sentence (←)" aria-label="Back a sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 19l-7-7 7-7v4h9v6h-9z"/></svg></button>
+        <button type="button" class="tbtn play" id="playBtn" title="Play / pause (space)" aria-label="Play"><svg viewBox="0 0 24 24" id="playIcon" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+        <button type="button" class="tbtn" id="fwdBtn" title="Forward a sentence (→)" aria-label="Forward a sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 5l7 7-7 7v-4H4v-6h9z"/></svg></button>
       </div>
 
       <div class="controls">

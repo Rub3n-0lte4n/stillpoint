@@ -205,8 +205,18 @@
       radial-gradient(700px 300px at 50% 50%, rgba(35,22,52,0.7), rgba(14,9,24,0.55));
     border:1px solid var(--hair);box-shadow:var(--shadow);
     padding:70px 30px;min-height:300px;display:flex;align-items:center;justify-content:center;
-    overflow:hidden;
+    overflow:hidden;cursor:pointer;
   }
+  /* dimmed current sentence beneath the focal word — keeps comprehension/context */
+  .stage .context{
+    position:absolute;left:7%;right:7%;bottom:34px;text-align:center;pointer-events:none;
+    font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-size:17px;line-height:1.7;
+    color:var(--ink-mute);max-height:5.1em;overflow:hidden;
+    -webkit-mask-image:linear-gradient(180deg,#000 58%,transparent);mask-image:linear-gradient(180deg,#000 58%,transparent);
+    transition:opacity .3s;
+  }
+  .stage .context .cw{transition:color .15s;}
+  .stage .context .cw.on{color:var(--ink);}   /* current word, brighter, to map the flash to its place */
   /* focus guide ticks */
   .stage .guide{position:absolute;left:50%;transform:translateX(-50%);width:2px;background:var(--focus);opacity:.55;box-shadow:0 0 10px rgba(255,206,92,0.5);}
   .stage .guide.top{top:54px;height:20px;}
@@ -244,7 +254,7 @@
   .track .knob{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(197,163,255,0.3),0 2px 8px rgba(0,0,0,.5);}
 
   .transport{display:flex;align-items:center;justify-content:center;gap:22px;margin-bottom:18px;}
-  .tbtn{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair);background:var(--surface-2);color:var(--ink-soft);transition:all .2s;}
+  .tbtn{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;cursor:pointer;border:1px solid var(--hair);background:var(--surface-2);color:var(--ink-soft);transition:all .2s;appearance:none;-webkit-appearance:none;padding:0;font:inherit;}
   .tbtn:hover{color:#fff;border-color:var(--amethyst);transform:translateY(-2px);}
   .tbtn svg{width:20px;height:20px;fill:currentColor;}
   .tbtn.play{width:70px;height:70px;background:linear-gradient(140deg,var(--amethyst),var(--amethyst-deep));border:none;color:#fff;box-shadow:0 12px 34px -8px rgba(139,92,246,0.7);}
@@ -308,4 +318,22 @@
     input[type=range]{width:min(72vw,280px);}
     select.nav-sel{max-width:150px;padding:11px 14px;}
     .kbd-hint{display:none;}                       /* no hardware keyboard on touch */
+  }
+
+  /* ---------- accessibility ---------- */
+  /* visible keyboard focus on every interactive control */
+  a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible,
+  [role="button"]:focus-visible, [role="slider"]:focus-visible, .recent-item:focus-visible{
+    outline:2px solid var(--amethyst);
+    outline-offset:3px;
+    border-radius:8px;
+  }
+  /* respect users who prefer reduced motion (the word stepping is JS, not animation, so reading still works) */
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:.001ms !important; animation-iteration-count:1 !important;
+      transition-duration:.001ms !important; scroll-behavior:auto !important;
+    }
+    .dropzone:hover, .tier:hover, .support-pill:hover, .tbtn:hover, .recent-item:hover{ transform:none !important; }
+    .parsing .ring{ animation:none !important; border-top-color:var(--amethyst); }
   }
