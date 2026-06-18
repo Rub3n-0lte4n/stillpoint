@@ -207,14 +207,14 @@
     padding:70px 30px;min-height:300px;display:flex;align-items:center;justify-content:center;
     overflow:hidden;cursor:pointer;
   }
-  /* flowing centred ribbon — current word's pivot held centre, neighbours dim, eases left each step */
+  /* centred ribbon — current word's pivot snapped to centre & held still; neighbours dim for context */
   .stage .ribbon{
     position:absolute;top:50%;left:0;white-space:nowrap;pointer-events:none;
     transform:translate(0,-50%);will-change:transform;
     font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
     font-size:min(var(--read-size,62px),13vw);line-height:1;letter-spacing:.5px;
   }
-  .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.26;transition:opacity .18s ease,color .18s ease;}
+  .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.26;}
   .stage .ribbon .rw.on{opacity:1;}
   .stage .ribbon .rw.pivot .rpiv{color:var(--focus);font-weight:700;text-shadow:0 0 18px rgba(255,206,92,0.65),0 0 2px rgba(255,206,92,0.9);}
   .stage .ribbon.no-ctx .rw:not(.on){opacity:0;}   /* context toggle off => only the current word shows */

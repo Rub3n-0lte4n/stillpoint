@@ -29,10 +29,10 @@ const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
 const settings = { countdown:true, context:true };  // reading aids (persisted)
 
-/* ---------------- flowing ribbon ----------------
-   One centred line of words. The pivot letter of the current word is held on the
-   focal point; neighbours sit dim on either side. Each step the ribbon eases left
-   so the next word's pivot glides into the centre. */
+/* ---------------- centred ribbon ----------------
+   One centred line of words. The current word's pivot letter is snapped onto the
+   focal point and held STILL for its whole dwell (no sliding) so it stays readable
+   at speed; dim neighbours sit on either side for context, refreshing in place. */
 let ribbonStart = 0, ribbonLast = -1, ribbonOffset = 0;
 
 function pivotWordIndex(){
@@ -51,8 +51,10 @@ function buildRibbon(){
   }
   const rb=$("ribbon"); rb.innerHTML=html; ribbonStart=start; ribbonLast=end;
 }
-// Slide the ribbon so the pivot word's focal letter sits at the stage centre.
-function centerRibbon(animate){
+// Snap the ribbon so the pivot word's focal letter sits exactly on the stage centre.
+// Positioning is INSTANT (no slide): the focal word is stationary during its dwell, so
+// it stays readable at speed — your eye locks on the centre instead of tracking motion.
+function centerRibbon(){
   const rb=$("ribbon"), stage=$("stage");
   rb.querySelectorAll(".rw.on, .rw.pivot").forEach(e=>e.classList.remove("on","pivot"));
   const highlight = (S.mode==="orp" || S.mode==="hybrid");
@@ -64,30 +66,24 @@ function centerRibbon(animate){
   const pr = pwEl.querySelector(".rpiv").getBoundingClientRect();
   const sr = stage.getBoundingClientRect();
   const target = Math.round((ribbonOffset + (sr.left+sr.width/2) - (pr.left+pr.width/2))*100)/100;
-  const dur = Math.max(80, Math.min(220, (60000/Math.max(1,S.wpm))*0.7));
-  rb.style.transition = animate ? `transform ${dur}ms ease-out` : "none";
   rb.style.transform = `translate(${target}px, -50%)`;
   ribbonOffset = target;
-  if(!animate){ void rb.offsetWidth; rb.style.transition = `transform ${dur}ms ease-out`; }   // re-enable after reflow
 }
-// Show the current position in the ribbon (animate=true eases from the previous word).
-function render(animate){
+// Show the current position: focal word centred & still, neighbours dim alongside for context.
+function render(){
   if(!S.tokens.length || S.index>=S.tokens.length) return;
   $("resting").classList.add("hidden");
   $("word").classList.add("hidden");
   const rb=$("ribbon"); rb.classList.remove("hidden");
   rb.classList.toggle("no-ctx", !settings.context);
-  if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2){
-    buildRibbon(); centerRibbon(false);     // (re)build and snap into place
-  } else {
-    centerRibbon(animate);
-  }
+  if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2) buildRibbon();
+  centerRibbon();
 }
 
 /* ---------------- playback loop ---------------- */
 function step(){
   if(S.index>=S.tokens.length){ finish(); return; }   // reached the end
-  render(true);
+  render();
   const chunkTokens = S.tokens.slice(S.index, S.index+S.chunk);
 
   // gentle speed ramp: ease from RAMP_MIN up to full WPM over the first words of a run
@@ -164,7 +160,7 @@ function finish(){
 /* ---------------- navigation ---------------- */
 function jumpTo(i){
   S.index = Math.max(0, Math.min(i, S.tokens.length-1));
-  render(false); updateProgress(); saveProgress();
+  render(); updateProgress(); saveProgress();
 }
 function backSentence(){
   let i = S.index-1;
@@ -355,7 +351,7 @@ function setMode(m){
   else if(m==="hybrid"){ if(S.chunk<2) S.chunk=3; chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; setChunkUI(S.chunk);
     document.querySelector('#chunkSeg button[data-c="1"]').style.display="none"; }
   else { chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; document.querySelector('#chunkSeg button[data-c="1"]').style.display=""; setChunkUI(S.chunk); }
-  if(!$("ribbon").classList.contains("hidden")) render(false);   // re-centre if currently showing
+  if(!$("ribbon").classList.contains("hidden")) render();   // re-centre if currently showing
 }
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
 function setWpm(v){
@@ -367,7 +363,7 @@ function setWpm(v){
 }
 function setSize(s){ S.size=s; document.documentElement.style.setProperty("--read-size",s+"px");
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.s===s));
-  if(!$("ribbon").classList.contains("hidden")) render(false);   // re-centre at the new size
+  if(!$("ribbon").classList.contains("hidden")) render();   // re-centre at the new size
 }
 function applyAids(){
   document.querySelectorAll("#aidSeg button").forEach(b=>{
@@ -413,7 +409,7 @@ function init(){
   document.addEventListener("visibilitychange",()=>{ if(document.hidden && S.playing) pause(); });
 
   document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
-  document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render(false);});
+  document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render();});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
 
