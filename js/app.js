@@ -315,25 +315,42 @@ function goHome(){
   renderLibrary();
 }
 
+// Decide PDF vs EPUB by sniffing the file's magic bytes first (most reliable — works for
+// files with no/odd extension or a generic name), then fall back to extension, then MIME type.
+async function detectKind(file){
+  try{
+    const head = new Uint8Array(await file.slice(0,4).arrayBuffer());
+    if(head[0]===0x25&&head[1]===0x50&&head[2]===0x44&&head[3]===0x46) return "pdf";   // %PDF
+    if(head[0]===0x50&&head[1]===0x4B&&head[2]===0x03&&head[3]===0x04) return "epub";  // PK.. (zip → EPUB; parseEPUB validates)
+  }catch(e){ /* fall through to name/MIME */ }
+  const ext=(file.name.split(".").pop()||"").toLowerCase();
+  if(ext==="pdf") return "pdf";
+  if(ext==="epub"||ext==="kepub") return "epub";
+  const type=(file.type||"").toLowerCase();
+  if(type.includes("pdf")) return "pdf";
+  if(type.includes("epub")||type.includes("zip")) return "epub";
+  return null;
+}
+
 async function handleFile(file){
   if(!file) return;
-  const name=file.name.replace(/\.(pdf|epub)$/i,"");
-  const ext=(file.name.split(".").pop()||"").toLowerCase();
+  const name=file.name.replace(/\.[^.]+$/,"") || file.name;   // strip any trailing extension for display
   const key = file.name+"::"+file.size;
   showParse("Opening "+name+"…", "Extracting text locally");
   try{
-    if(ext==="pdf"){
+    const kind = await detectKind(file);
+    if(kind==="pdf"){
       const {tokens,units,pages}=await parsePDF(file, setParse);
       hideParse();
       openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key);
       persist(key,{kind:"pdf",blob:file,name:file.name});
-    } else if(ext==="epub"){
+    } else if(kind==="epub"){
       const {tokens,units,chapters}=await parseEPUB(file, setParse);
       hideParse();
       openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key);
       persist(key,{kind:"epub",blob:file,name:file.name});
     } else {
-      hideParse(); toast("Please choose a PDF or EPUB file.");
+      hideParse(); toast("That doesn't look like a PDF or EPUB. Try another file.");
     }
   }catch(err){
     console.error(err); hideParse();
