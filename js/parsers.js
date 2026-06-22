@@ -4,8 +4,8 @@ import { tokenize } from "./text.js";
 
 const pdfjsLib = window.pdfjsLib;
 const JSZip = window.JSZip;
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+// Vendored worker (same version) — keeps PDF parsing working offline.
+pdfjsLib.GlobalWorkerOptions.workerSrc = "js/vendor/pdf.worker.min.js";
 
 /* ---------------- PDF ---------------- */
 export async function parsePDF(file, onProgress = ()=>{}){

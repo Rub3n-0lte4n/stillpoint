@@ -24,29 +24,33 @@
 <meta name="twitter:description" content="Stream any PDF or EPUB through a single focal point. A calm, private speed-reader that runs entirely in your browser. Free." />
 <meta name="twitter:image" content="https://rub3n-0lte4n.github.io/stillpoint/og.png" />
 
-<!-- Content Security Policy: lock script/style/connect to self + the pinned CDN + font hosts.
-     'unsafe-inline' is required for the single-file inline script/styles; see README security notes. -->
+<!-- Content Security Policy: scripts are now same-origin (vendored), so no third-party
+     script host is allowed. Only Google Fonts remains cross-origin (style + font + the
+     runtime fetch the service worker uses to cache them for offline). -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
-  script-src 'self' https://cdnjs.cloudflare.com blob:;
-  worker-src blob:;
+  script-src 'self' blob:;
+  worker-src 'self' blob:;
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-  font-src https://fonts.gstatic.com;
+  font-src 'self' https://fonts.gstatic.com;
   img-src 'self' data:;
-  connect-src 'self' https://cdnjs.cloudflare.com blob: data:;
+  connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com blob: data:;
+  manifest-src 'self';
   object-src 'none';
   base-uri 'self';
   form-action 'self'" />
 <meta name="referrer" content="no-referrer" />
+<link rel="manifest" href="manifest.webmanifest" />
 
 <!-- Fonts: Fraunces (display serif) · Atkinson Hyperlegible (focal reading word) · Spline Sans (UI) -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 
-<!-- In-browser parsers (integrity-pinned, CORS-loaded) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- In-browser parsers, vendored locally (pdf.js 3.11.174 · JSZip 3.10.1) so the app
+     works fully offline. Same-origin, so SRI/crossorigin are unnecessary. -->
+<script src="js/vendor/pdf.min.js"></script>
+<script src="js/vendor/jszip.min.js"></script>
 
 <link rel="stylesheet" href="styles.css" />
 </head>

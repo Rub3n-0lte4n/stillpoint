@@ -486,3 +486,10 @@ function init(){
 
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", init);
 else init();
+
+// Register the service worker so the app (and your already-opened library) works offline.
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{ /* offline mode unavailable; app still works online */ });
+  });
+}
