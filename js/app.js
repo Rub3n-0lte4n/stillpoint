@@ -361,6 +361,94 @@ function showParse(t,s){ $("parseTitle").textContent=t; $("parseSub").textConten
 function setParse(p){ $("parseFill").style.width=Math.round(p*100)+"%"; }
 function hideParse(){ $("parsing").classList.remove("show"); }
 
+/* ---------------- library backup (export / import) ----------------
+   Move a whole library between devices with no server: export bundles the
+   library list, reading positions, settings and the cached book files into one
+   JSON file; import merges it back in (keeping the most-recently-read position
+   per book). Files are base64-encoded inline so the backup is fully self-contained. */
+const BACKUP_FORMAT = "stillpoint-backup";
+const PREFS_KEY = "fp_prefs";
+
+function blobToDataURL(blob){
+  return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsDataURL(blob); });
+}
+function dataURLToBlob(durl){
+  const [head,b64] = String(durl).split(",");
+  const mime = (head.match(/data:([^;]+)/)||[])[1] || "application/octet-stream";
+  const bin = atob(b64), len = bin.length, bytes = new Uint8Array(len);
+  for(let i=0;i<len;i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], { type:mime });
+}
+
+async function exportLibrary(){
+  const lib = loadLib();
+  if(lib.length===0){ toast("Nothing to export yet — open a book first."); return; }
+  let prefs=null; try{ prefs = JSON.parse(localStorage.getItem(PREFS_KEY)||"null"); }catch(e){}
+  showParse("Packaging your library…","Bundling books, positions and settings");
+  try{
+    const files=[];
+    for(const item of lib){
+      let rec; try{ rec = await Store.get(item.key); }catch(e){}
+      if(!rec) continue;  // metadata-only entry (file no longer on this device)
+      if(rec.kind==="text") files.push({ key:item.key, kind:"text", name:rec.name||item.title, text:rec.text });
+      else if(rec.blob)     files.push({ key:item.key, kind:rec.kind, name:rec.name||item.title, data:await blobToDataURL(rec.blob) });
+    }
+    const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files };
+    const blob = new Blob([JSON.stringify(backup)], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `stillpoint-library-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    hideParse();
+    toast(`Exported ${files.length} book${files.length===1?"":"s"}. Import this file on another device to sync.`);
+  }catch(err){ hideParse(); toast("Couldn't export — "+(err&&err.message?err.message:err), {error:true}); }
+}
+
+async function importBackup(file){
+  if(!file) return;
+  let data;
+  try{ data = JSON.parse(await file.text()); }
+  catch(e){ toast("That file isn't a valid Stillpoint backup.", {error:true}); return; }
+  if(!data || data.format!==BACKUP_FORMAT || !Array.isArray(data.library)){
+    toast("That doesn't look like a Stillpoint backup.", {error:true}); return;
+  }
+  showParse("Importing your library…","Restoring books and positions");
+  try{
+    let restored=0;
+    for(const f of (data.files||[])){
+      try{
+        if(f.kind==="text") await Store.put(f.key, { kind:"text", text:f.text, name:f.name });
+        else if(f.data)     await Store.put(f.key, { kind:f.kind, blob:dataURLToBlob(f.data), name:f.name });
+        restored++;
+      }catch(e){ /* skip one unreadable entry, keep the rest */ }
+    }
+    // Merge the library, keeping the most-recently-read entry per book (syncs progress).
+    const byKey = new Map();
+    for(const it of loadLib()) byKey.set(it.key, it);
+    for(const it of data.library){
+      const ex = byKey.get(it.key);
+      if(!ex || (it.ts||0) > (ex.ts||0)) byKey.set(it.key, it);
+    }
+    saveLib([...byKey.values()].sort((a,b)=>(b.ts||0)-(a.ts||0)));
+    await pruneStore();
+    // Restore settings if the backup carried them.
+    if(data.prefs){
+      try{
+        localStorage.setItem(PREFS_KEY, JSON.stringify(data.prefs));
+        if(data.prefs.wpm)  setWpm(data.prefs.wpm);
+        if(data.prefs.size) setSize(data.prefs.size);
+        if(data.prefs.mode) setMode(data.prefs.mode);
+        if(typeof data.prefs.countdown==="boolean") settings.countdown = data.prefs.countdown;
+        if(typeof data.prefs.context==="boolean")   settings.context   = data.prefs.context;
+        applyAids();
+      }catch(e){}
+    }
+    hideParse(); renderLibrary();
+    toast(`Imported ${restored} book${restored===1?"":"s"} into your library.`);
+  }catch(err){ hideParse(); toast("Couldn't import that backup — "+(err&&err.message?err.message:err), {error:true}); }
+}
+
 /* ---------------- controls ---------------- */
 function setMode(m){
   S.mode=m;
@@ -400,6 +488,11 @@ function init(){
   ["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag");}));
   ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag");}));
   dz.addEventListener("drop",e=>handleFile(e.dataTransfer.files[0]));
+
+  // library backup: export to a file, import on another device
+  $("exportBtn").onclick = exportLibrary;
+  $("importBtn").onclick = ()=>$("importInput").click();
+  $("importInput").onchange = e=>{ const f=e.target.files[0]; importBackup(f); e.target.value=""; };
 
   $("pasteGo").onclick=()=>{
     const txt=$("paste").value.trim();

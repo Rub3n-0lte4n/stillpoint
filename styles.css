@@ -161,6 +161,11 @@
   .recent-item .ri-x{flex:none;color:var(--ink-mute);font-size:16px;padding:2px 6px;border-radius:6px;}
   .recent-item .ri-x:hover{color:var(--rose);background:rgba(240,166,200,0.12);}
 
+  .backup{max-width:680px;margin:34px auto 0;padding:22px 24px;border:1px solid var(--hair);border-radius:var(--r-sm);background:var(--surface);text-align:center;}
+  .backup-head{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:10px;}
+  .backup-copy{color:var(--ink-soft);font-size:13.5px;line-height:1.6;max-width:52ch;margin:0 auto 16px;}
+  .backup-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+
   /* buttons */
   .btn{
     font-family:inherit;font-size:14px;font-weight:500;letter-spacing:.3px;cursor:pointer;
