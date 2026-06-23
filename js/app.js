@@ -380,29 +380,63 @@ function dataURLToBlob(durl){
   return new Blob([bytes], { type:mime });
 }
 
-async function exportLibrary(){
+function backupFilename(){ return `stillpoint-library-${new Date().toISOString().slice(0,10)}.json`; }
+
+// Bundle everything stored locally (library list + positions + prefs + the cached
+// book files, base64-encoded inline) into one self-contained Blob. Returns {blob,count}
+// or null if there's nothing to back up.
+async function buildBackup(){
   const lib = loadLib();
-  if(lib.length===0){ toast("Nothing to export yet — open a book first."); return; }
+  if(lib.length===0){ toast("Nothing to back up yet — open a book first."); return null; }
   let prefs=null; try{ prefs = JSON.parse(localStorage.getItem(PREFS_KEY)||"null"); }catch(e){}
+  const files=[];
+  for(const item of lib){
+    let rec; try{ rec = await Store.get(item.key); }catch(e){}
+    if(!rec) continue;  // metadata-only entry (file no longer on this device)
+    if(rec.kind==="text") files.push({ key:item.key, kind:"text", name:rec.name||item.title, text:rec.text });
+    else if(rec.blob)     files.push({ key:item.key, kind:rec.kind, name:rec.name||item.title, data:await blobToDataURL(rec.blob) });
+  }
+  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files };
+  return { blob:new Blob([JSON.stringify(backup)], { type:"application/json" }), count:files.length };
+}
+
+// Download the backup as a file (works everywhere).
+async function exportLibrary(){
   showParse("Packaging your library…","Bundling books, positions and settings");
+  let res; try{ res = await buildBackup(); }
+  catch(err){ hideParse(); toast("Couldn't export — "+(err&&err.message?err.message:err), {error:true}); return; }
+  if(!res){ hideParse(); return; }
+  const url = URL.createObjectURL(res.blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = backupFilename();
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  hideParse();
+  toast(`Exported ${res.count} book${res.count===1?"":"s"}. Import this file on another device to sync.`);
+}
+
+// True only when the browser can share actual files (iOS/iPadOS Safari, Android Chrome…).
+function canShareFiles(){
+  try{ return !!(navigator.canShare && navigator.canShare({ files:[new File(["{}"], backupFilename(), { type:"application/json" })] })); }
+  catch(e){ return false; }
+}
+// Hand the backup file to the OS share sheet — AirDrop, Messages, Mail, etc.
+async function shareBackup(){
+  if(!navigator.share){ return exportLibrary(); }   // no Web Share at all → just download
+  showParse("Preparing your library…","Bundling books, positions and settings");
+  let res; try{ res = await buildBackup(); }
+  catch(err){ hideParse(); toast("Couldn't prepare the backup — "+(err&&err.message?err.message:err), {error:true}); return; }
+  if(!res){ hideParse(); return; }
+  hideParse();
+  const file = new File([res.blob], backupFilename(), { type:"application/json" });
+  if(navigator.canShare && !navigator.canShare({ files:[file] })){ return exportLibrary(); }  // files unsupported → download
   try{
-    const files=[];
-    for(const item of lib){
-      let rec; try{ rec = await Store.get(item.key); }catch(e){}
-      if(!rec) continue;  // metadata-only entry (file no longer on this device)
-      if(rec.kind==="text") files.push({ key:item.key, kind:"text", name:rec.name||item.title, text:rec.text });
-      else if(rec.blob)     files.push({ key:item.key, kind:rec.kind, name:rec.name||item.title, data:await blobToDataURL(rec.blob) });
-    }
-    const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files };
-    const blob = new Blob([JSON.stringify(backup)], { type:"application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `stillpoint-library-${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 5000);
-    hideParse();
-    toast(`Exported ${files.length} book${files.length===1?"":"s"}. Import this file on another device to sync.`);
-  }catch(err){ hideParse(); toast("Couldn't export — "+(err&&err.message?err.message:err), {error:true}); }
+    await navigator.share({ files:[file], title:"Stillpoint library",
+      text:"My Stillpoint library — open Stillpoint on the other device and tap “Import backup”." });
+  }catch(err){
+    if(err && err.name==="AbortError") return;   // user dismissed the sheet — not an error
+    toast("Couldn't open the share sheet — exporting instead."); exportLibrary();
+  }
 }
 
 async function importBackup(file){
@@ -489,7 +523,8 @@ function init(){
   ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag");}));
   dz.addEventListener("drop",e=>handleFile(e.dataTransfer.files[0]));
 
-  // library backup: export to a file, import on another device
+  // library backup: share (AirDrop/etc.), export to a file, or import on another device
+  if(canShareFiles()){ const sb=$("shareBtn"); sb.classList.remove("hidden"); sb.onclick=shareBackup; }
   $("exportBtn").onclick = exportLibrary;
   $("importBtn").onclick = ()=>$("importInput").click();
   $("importInput").onchange = e=>{ const f=e.target.files[0]; importBackup(f); e.target.value=""; };
