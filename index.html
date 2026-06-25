@@ -78,7 +78,17 @@
 
     <section class="hero">
       <h2>Read at the speed of <em>thought.</em></h2>
-      <p>Drop in a PDF or EPUB and let every word arrive at a single, still focal point — no eye movement, no scanning. Pure flow.</p>
+      <p>Every word arrives at a single, still point — so your eyes stop scanning and your attention stops wandering. Just focus, and flow.</p>
+
+      <div class="hero-demo" id="heroDemo" role="img" aria-label="Preview: words streaming one at a time through a single fixed focal point">
+        <span class="hd-guide top"></span>
+        <div class="hd-word" id="hdWord"><span class="pre"></span><span class="piv"></span><span class="post"></span></div>
+        <span class="hd-guide bot"></span>
+      </div>
+      <p class="hero-cap">A live preview — the whole idea in three seconds. <button type="button" class="linklike" id="heroTry">Try it on a sample passage →</button></p>
+
+      <p class="hero-pace">Set your own pace. Most readers settle around <b>400–600 words a minute</b> — roughly double quiet reading — but you choose every step of the way.</p>
+      <p class="hero-repel">Not built for skimming. Built for people who actually want to <em>finish</em> the book.</p>
     </section>
 
     <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Open a PDF or EPUB file">
@@ -115,9 +125,14 @@
       </div>
     </div>
 
+    <section class="founder">
+      <p class="founder-quote">“I kept buying books I never finished — not for lack of wanting to, but because sitting still with a page had quietly become hard. Stillpoint is the reader I built to fix that for myself. It turned the stack I felt guilty about back into something I actually get through.”</p>
+      <p class="founder-sig">— Ruben, who made Stillpoint</p>
+    </section>
+
     <section class="support-section">
       <div class="support-eyebrow">Support Stillpoint</div>
-      <p class="support-copy">Stillpoint is free and always will be — no ads, no accounts, nothing tracked. If it helped you read, you can leave a tip. Every bit funds new features.</p>
+      <p class="support-copy">A refined thing, made free — no ads, no accounts, nothing tracked. If Stillpoint helped you read, you can leave a tip. It's what keeps it alive and growing — the readers who love it are the only thing funding it.</p>
       <div class="tiers">
         <a class="tier" href="https://donate.stripe.com/dRmbJ112c1hJcBzfWy7N601" target="_blank" rel="noopener noreferrer">
           <span class="emoji">☕</span><span class="tier-label">Buy me a coffee</span><span class="tier-amt">$3</span>
@@ -193,9 +208,9 @@
         <div class="ctrl">
           <label>Mode</label>
           <div class="seg" id="modeSeg">
-            <button data-mode="orp" class="active">ORP</button>
-            <button data-mode="rsvp">RSVP</button>
-            <button data-mode="hybrid">Hybrid</button>
+            <button data-mode="orp" class="active" title="One word at a time">ORP</button>
+            <button data-mode="rsvp" title="In small phrases">RSVP</button>
+            <button data-mode="hybrid" title="A blend of both">Hybrid</button>
           </div>
         </div>
 
@@ -260,8 +275,27 @@
       <div><b id="stWpm">0</b><span>avg wpm</span></div>
     </div>
     <div class="done-actions">
+      <button type="button" class="btn ghost" id="doneShare">Share result</button>
       <button type="button" class="btn ghost" id="doneAgain">Read again</button>
       <button type="button" class="btn gold" id="doneLib">Back to library</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HOW IT WORKS ============ -->
+<div class="about" id="about">
+  <div class="about-card" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+    <button type="button" class="about-x" id="aboutClose" aria-label="Close">✕</button>
+    <h3 id="aboutTitle">How Stillpoint works</h3>
+    <p class="about-lead">When you read normally, your eyes don't glide along the line — they jump, stop, and often dart back to re-read. Stillpoint removes the chase: it holds each word at one fixed point, aligned on the letter your eye naturally locks onto. You stay still; the words come to you.</p>
+    <div class="about-grid">
+      <div class="about-item"><span class="ai-k">One word at a time</span><span class="ai-v">Each word centred on its focal letter — the calmest, most precise way to read. <em>ORP</em></span></div>
+      <div class="about-item"><span class="ai-k">In small phrases</span><span class="ai-v">A few words at once, for a faster, more natural rhythm. <em>RSVP</em></span></div>
+      <div class="about-item"><span class="ai-k">A blend of both</span><span class="ai-v">Short phrases with the focal anchor kept in place. <em>Hybrid</em></span></div>
+    </div>
+    <p class="about-note">Everything runs inside your browser. Your files are parsed and read on this device and never uploaded — no account, no server, nothing tracked.</p>
+    <div class="about-actions">
+      <button type="button" class="btn gold" id="aboutTry">Try a sample passage →</button>
     </div>
   </div>
 </div>

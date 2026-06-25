@@ -1,5 +1,5 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
-import { tokenize, orpIndex, esc, DEMO } from "./text.js";
+import { tokenize, orpIndex, esc, DEMO, HERO } from "./text.js";
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
@@ -513,6 +513,45 @@ function applyAids(){
   });
 }
 
+/* ---------------- hero demo / how-it-works / share ----------------
+   An auto-playing focal stream in the hero so the product demonstrates itself
+   above the fold — the strongest conversion lever. Pauses when off-screen or the
+   tab is hidden, and shows a single still word for reduced-motion users. */
+function heroDemo(){
+  const box=$("heroDemo"), wEl=$("hdWord"); if(!box||!wEl) return;
+  const pre=wEl.querySelector(".pre"), piv=wEl.querySelector(".piv"), post=wEl.querySelector(".post");
+  const show=(w)=>{ const oi=orpIndex(w); pre.textContent=w.slice(0,oi); piv.textContent=w[oi]||""; post.textContent=w.slice(oi+1); };
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches){ show("thought."); return; }  // no streaming motion
+  const toks=HERO.split(" ");
+  let i=0, timer=null, visible=true;
+  const tick=()=>{
+    const w=toks[i]; show(w);
+    let d=60000/360;                          // ~360 wpm, an unhurried preview pace
+    if(/[.!?]$/.test(w)) d+=440;              // breathe at sentence ends
+    i=(i+1)%toks.length;
+    timer=setTimeout(()=>{ if(visible && !document.hidden) tick(); }, d);
+  };
+  const start=()=>{ if(!timer && visible && !document.hidden) tick(); };
+  const stop=()=>{ clearTimeout(timer); timer=null; };
+  new IntersectionObserver(es=>{ visible=es[0].isIntersecting; visible?start():stop(); }).observe(box);
+  document.addEventListener("visibilitychange",()=>{ document.hidden?stop():start(); });
+  start();
+}
+function closeAbout(){ const a=$("about"); if(a) a.classList.remove("show"); }
+
+// Turn a finished session into a shareable line — a natural completion → acquisition loop.
+async function shareResult(){
+  const text=`I just finished “${S.title}” on Stillpoint — ${$("stWords").textContent} words in ${$("stTime").textContent}, at ${$("stWpm").textContent} wpm. A calm, private speed-reader that runs entirely in your browser.`;
+  const url="https://rub3n-0lte4n.github.io/stillpoint/";
+  if(navigator.share){
+    try{ await navigator.share({ title:"Stillpoint", text, url }); }
+    catch(err){ if(!(err && err.name==="AbortError")){ /* fall through to copy below on real failure */ try{ await navigator.clipboard.writeText(text+" "+url); toast("Result copied — paste it anywhere to share."); }catch(e){} } }
+    return;
+  }
+  try{ await navigator.clipboard.writeText(text+" "+url); toast("Result copied — paste it anywhere to share."); }
+  catch(e){ toast("Couldn't copy automatically — long-press to copy your result."); }
+}
+
 /* ---------------- wiring ---------------- */
 function init(){
   const dz=$("dropzone"), fi=$("fileInput");
@@ -537,8 +576,21 @@ function init(){
     openReader(toks,[{title:"Pasted text",start:0}],"Pasted text",`TEXT · ${toks.length.toLocaleString()} words`,key);
     persist(key,{kind:"text",text:txt});
   };
-  $("demoBtn").onclick=()=>{ $("paste").value=DEMO; };
-  $("aboutLink").onclick=(e)=>{e.preventDefault();$("paste").value=DEMO;$("paste").scrollIntoView({behavior:"smooth"});};
+  const loadSample=()=>{ $("paste").value=DEMO; closeAbout(); $("paste").scrollIntoView({behavior:"smooth"}); $("paste").focus(); };
+  $("demoBtn").onclick=()=>{ $("paste").value=DEMO; $("paste").focus(); };
+  $("heroTry").onclick=loadSample;
+  $("aboutTry").onclick=loadSample;
+
+  // "How it works" — opens the explainer modal (was a dead # link)
+  const about=$("about");
+  const openAbout=()=>{ about.classList.add("show"); $("aboutClose").focus(); };
+  $("aboutLink").onclick=(e)=>{ e.preventDefault(); openAbout(); };
+  $("aboutClose").onclick=closeAbout;
+  about.addEventListener("click",e=>{ if(e.target===about) closeAbout(); });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape" && about.classList.contains("show")) closeAbout(); });
+
+  $("doneShare").onclick=shareResult;
+  heroDemo();
 
   $("playBtn").onclick=toggle;
   $("backBtn").onclick=backSentence;

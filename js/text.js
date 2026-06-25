@@ -28,4 +28,7 @@ export function esc(s){
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
+// Short looping passage for the auto-playing hero preview — phrased so the demo also carries the message.
+export const HERO = `Every word arrives at one still point. No scanning. No hunting across the line. Your eyes rest while the reading moves. This is what focus feels like.`;
+
 export const DEMO = `Reading is a curious act of magic. We take small marks arranged on a surface and, almost instantly, they bloom into meaning inside the mind. The eye does not glide smoothly across a line; it leaps, pauses, and leaps again, landing on a single point within each word before the brain assembles the rest. Stillpoint borrows that natural anchor. Instead of asking your eyes to chase the text, it brings each word to you and holds it at the very spot your attention already wants to rest. The result feels less like reading and more like remembering — as though the words were already there, waiting to be recognised. Try sliding the speed upward. You will be surprised how much faster you can read when your eyes are allowed to stay perfectly still.`;
