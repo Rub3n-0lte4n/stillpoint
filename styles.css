@@ -72,6 +72,16 @@
   /* mobile interaction hygiene */
   button,a,[role="button"],.stage,.tbtn,.seg button,.btn,.settings-toggle{touch-action:manipulation;}
   .track{touch-action:none;}  /* horizontal scrub without the page scrolling under the finger */
+  .stage,.dock,.reader-top{-webkit-user-select:none;user-select:none;}  /* no accidental text-select while tapping the player */
+  .reader{overscroll-behavior:none;}  /* app-like: no pull-to-refresh while reading */
+  /* touch devices: drop the sticky hover-lift, give a press response instead */
+  @media (hover:none){
+    .dropzone:hover,.tier:hover,.recent-item:hover,.support-pill:hover,.tbtn:hover{transform:none;}
+    .dropzone:active{transform:scale(.99);}
+    .tier:active{transform:scale(.96);}
+    .btn:active{transform:scale(.96);}
+    .recent-item:active{background:var(--surface-2);}
+  }
   /* fine grain overlay for atmosphere */
   body::after{
     content:"";position:fixed;inset:0;pointer-events:none;z-index:9999;opacity:0.035;
@@ -453,6 +463,11 @@
     .about-card{padding:32px 22px;}
     .dropzone{padding:34px 22px;}
     .or-row,.paste-shell,.recent{max-width:none;}
+    /* ≥44px touch targets on phones */
+    .btn{padding:13px 22px;}
+    .support-pill{padding:11px 16px;}
+    footer.site a{display:inline-block;padding:7px 2px;}
+    .recent-item .ri-x{padding:11px;margin:-7px -4px;}
 
     /* reader */
     .reader-top{padding:max(16px, calc(env(safe-area-inset-top) + 8px)) 0 2px;}
