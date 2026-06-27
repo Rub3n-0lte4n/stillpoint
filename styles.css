@@ -463,8 +463,8 @@
     .about-card{padding:32px 22px;}
     .dropzone{padding:34px 22px;}
     .or-row,.paste-shell,.recent{max-width:none;}
-    /* ≥44px touch targets on phones */
-    .btn{padding:13px 22px;}
+    /* ≥44px touch targets on phones, without the labels wrapping to two lines */
+    .btn{padding:14px 16px;white-space:nowrap;}
     .support-pill{padding:11px 16px;}
     footer.site a{display:inline-block;padding:7px 2px;}
     .recent-item .ri-x{padding:11px;margin:-7px -4px;}
