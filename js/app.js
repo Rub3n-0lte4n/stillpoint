@@ -27,7 +27,7 @@ const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const REWIND_WORDS = 5;   // back up on resume for re-orientation
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
-const settings = { countdown:true, context:true };  // reading aids (persisted)
+const settings = { countdown:true, context:true, moreOpen:false };  // reading aids + dock state (persisted)
 
 /* ---------------- centred ribbon ----------------
    One centred line of words. The current word's pivot letter is snapped onto the
@@ -69,6 +69,29 @@ function centerRibbon(){
   rb.style.transform = `translate(${target}px, -50%)`;
   ribbonOffset = target;
 }
+// Shrink the focal word only when it would overflow the stage (e.g. long words on a
+// narrow phone) — short words keep the chosen size; long words scale down to stay readable
+// instead of running off the edges into the fade mask.
+function fitRibbon(){
+  const rb=$("ribbon"), stage=$("stage");
+  rb.style.fontSize="";   // back to the CSS-chosen base each step
+  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
+  let left=Infinity, right=-Infinity;
+  for(let k=S.index;k<endChunk;k++){
+    const el=rb.querySelector(`.rw[data-i="${k}"]`);
+    if(!el) continue;
+    const r=el.getBoundingClientRect();
+    if(r.left<left) left=r.left;
+    if(r.right>right) right=r.right;
+  }
+  if(right<=left) return;
+  const avail = stage.clientWidth * 0.9;       // leave a little breathing room from the edges
+  const wordW = right-left;
+  if(wordW > avail){
+    const base = parseFloat(getComputedStyle(rb).fontSize) || 40;
+    rb.style.fontSize = Math.max(16, base*(avail/wordW)) + "px";
+  }
+}
 // Show the current position: focal word centred & still, neighbours dim alongside for context.
 function render(){
   if(!S.tokens.length || S.index>=S.tokens.length) return;
@@ -78,6 +101,7 @@ function render(){
   rb.classList.toggle("no-ctx", !settings.context);
   rb.classList.toggle("playing", S.playing);
   if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2) buildRibbon();
+  fitRibbon();
   centerRibbon();
 }
 
@@ -157,6 +181,17 @@ function finish(){
   $("stWpm").textContent = avg.toLocaleString();
   $("doneSub").textContent = `You finished “${S.title}”.`;
   $("done").classList.add("show");
+  $("doneLib").focus({preventScroll:true});   // move focus into the dialog
+}
+
+// Keep Tab focus inside an open dialog (basic focus trap for the modals).
+function trapTab(container, e){
+  const sel='a[href],button:not([disabled]),input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])';
+  const list=[...container.querySelectorAll(sel)].filter(el=>el.offsetParent!==null && !el.closest(".hidden"));
+  if(!list.length) return;
+  const first=list[0], last=list[list.length-1], a=document.activeElement;
+  if(e.shiftKey){ if(a===first || !container.contains(a)){ e.preventDefault(); last.focus(); } }
+  else { if(a===last || !container.contains(a)){ e.preventDefault(); first.focus(); } }
 }
 
 /* ---------------- navigation ---------------- */
@@ -197,7 +232,7 @@ function toast(msg, {action, onAction, duration=4500, error=false}={}){
   const wrap=$("toasts");
   const el=document.createElement("div");
   el.className="toast"+(error?" err":"");
-  el.setAttribute("role","status");
+  el.setAttribute("role", error?"alert":"status");   // errors interrupt; status messages wait politely
   const m=document.createElement("span"); m.className="tmsg"; m.textContent=msg; el.appendChild(m);
   let timer;
   const dismiss=()=>{ clearTimeout(timer); if(!el.isConnected) return; el.classList.add("hide"); setTimeout(()=>el.remove(),240); };
@@ -268,9 +303,11 @@ function openReader(tokens, units, title, meta, key){
 
   $("landing").style.display="none";
   $("reader").classList.add("show");
+  if(!(history.state && history.state.sp==="reader")) history.pushState({sp:"reader"}, "");  // so Back returns to the library
   ribbonStart=0; ribbonLast=-1; ribbonOffset=0;   // reset the ribbon for the new document
   updateProgress();
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden"); $("ribbon").classList.add("hidden");
+  $("playBtn").focus({preventScroll:true});   // move focus into the reader (route-change focus)
   saveProgress(); // record the entry immediately so the recent library reflects it
 }
 
@@ -296,7 +333,7 @@ async function openFromStore(item){
     openReader(toks,[{title:"Pasted text",start:0}],item.title,`TEXT · ${toks.length.toLocaleString()} words`,item.key);
     return;
   }
-  showParse("Opening "+item.title+"…","Reading from this device");
+  showParse("Opening "+item.title+"…","Reading from this device",{kind:rec.kind,name:rec.name||item.title,size:rec.blob?rec.blob.size:0});
   try{
     if(rec.kind==="pdf"){
       const {tokens,units,pages}=await parsePDF(rec.blob, setParse);
@@ -305,14 +342,23 @@ async function openFromStore(item){
       const {tokens,units,chapters}=await parseEPUB(rec.blob, setParse);
       hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key);
     }
-  }catch(err){ hideParse(); toast("Couldn't reopen that file — "+(err&&err.message?err.message:err), {error:true}); }
+  }catch(err){ hideParse(); toast("Couldn't reopen that file — "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>openFromStore(item)}); }
 }
-function goHome(){
+// DOM transition back to the library. Moves focus to a sensible landing control
+// so keyboard / screen-reader users aren't stranded on the now-hidden reader.
+function showLibrary(){
   pause();
   $("done").classList.remove("show");
   $("reader").classList.remove("show");
   $("landing").style.display="";
   renderLibrary();
+  $("dropzone").focus({preventScroll:true});
+}
+// Route user-initiated exits through history so the browser/hardware Back button
+// returns to the library instead of leaving the site (popstate → showLibrary).
+function requestHome(){
+  if(history.state && history.state.sp==="reader") history.back();
+  else showLibrary();
 }
 
 // Decide PDF vs EPUB by sniffing the file's magic bytes first (most reliable — works for
@@ -336,29 +382,59 @@ async function handleFile(file){
   if(!file) return;
   const name=file.name.replace(/\.[^.]+$/,"") || file.name;   // strip any trailing extension for display
   const key = file.name+"::"+file.size;
-  showParse("Opening "+name+"…", "Extracting text locally");
+  const kind = await detectKind(file);
+  if(kind!=="pdf" && kind!=="epub"){ toast("That doesn't look like a PDF or EPUB. Try another file."); return; }
+  showParse("Opening "+name+"…", "Extracting text locally", {kind, name:file.name, size:file.size});
   try{
-    const kind = await detectKind(file);
     if(kind==="pdf"){
       const {tokens,units,pages}=await parsePDF(file, setParse);
       hideParse();
       openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key);
       persist(key,{kind:"pdf",blob:file,name:file.name});
-    } else if(kind==="epub"){
+    } else {
       const {tokens,units,chapters}=await parseEPUB(file, setParse);
       hideParse();
       openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key);
       persist(key,{kind:"epub",blob:file,name:file.name});
-    } else {
-      hideParse(); toast("That doesn't look like a PDF or EPUB. Try another file.");
     }
   }catch(err){
     console.error(err); hideParse();
-    toast("Couldn't read that file — "+(err&&err.message?err.message:err), {error:true});
+    // inline retry — the file is still in hand, so one tap resumes without re-picking it
+    toast("Couldn't read that file — "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>handleFile(file)});
   }
 }
-function showParse(t,s){ $("parseTitle").textContent=t; $("parseSub").textContent=s; $("parseFill").style.width="0%"; $("parsing").classList.add("show"); }
-function setParse(p){ $("parseFill").style.width=Math.round(p*100)+"%"; }
+let parseStart=0;
+function formatBytes(n){
+  if(!n) return "";
+  if(n<1024) return n+" B";
+  if(n<1024*1024) return Math.round(n/1024)+" KB";
+  return (n/1048576).toFixed(1)+" MB";
+}
+// fileMeta {kind,name,size} shows a proof-of-file chip; omit it for non-file work (export/import).
+function showParse(t,s,fileMeta){
+  $("parseTitle").textContent=t; $("parseSub").textContent=s;
+  $("parseFill").style.width="0%"; $("parsePct").textContent="0%"; $("parseEta").textContent="";
+  parseStart=Date.now();
+  const chip=$("fileChip");
+  if(fileMeta){
+    $("fcBadge").textContent=(fileMeta.kind||"DOC").toUpperCase();
+    $("fcName").textContent=fileMeta.name||"";
+    $("fcSize").textContent=formatBytes(fileMeta.size);
+    chip.classList.remove("hidden");
+  } else chip.classList.add("hidden");
+  $("parsing").classList.add("show");
+}
+function setParse(p){
+  const pct=Math.max(0,Math.min(1,p));
+  $("parseFill").style.width=Math.round(pct*100)+"%";
+  $("parsePct").textContent=Math.round(pct*100)+"%";
+  // honest time-left: extrapolate from elapsed once there's enough signal to be truthful
+  if(parseStart && pct>0.06){
+    const elapsed=(Date.now()-parseStart)/1000;
+    const remaining=elapsed*(1-pct)/pct;
+    $("parseEta").textContent = (remaining>0.6 && remaining<600) ? `~${Math.ceil(remaining)}s left` : (pct>0.85 ? "almost done" : "");
+  }
+}
 function hideParse(){ $("parsing").classList.remove("show"); }
 
 /* ---------------- library backup (export / import) ----------------
@@ -381,6 +457,15 @@ function dataURLToBlob(durl){
 }
 
 function backupFilename(){ return `stillpoint-library-${new Date().toISOString().slice(0,10)}.json`; }
+
+// Save a Blob to disk via a temporary link (works in every browser).
+function triggerDownload(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+}
 
 // Bundle everything stored locally (library list + positions + prefs + the cached
 // book files, base64-encoded inline) into one self-contained Blob. Returns {blob,count}
@@ -406,11 +491,7 @@ async function exportLibrary(){
   let res; try{ res = await buildBackup(); }
   catch(err){ hideParse(); toast("Couldn't export — "+(err&&err.message?err.message:err), {error:true}); return; }
   if(!res){ hideParse(); return; }
-  const url = URL.createObjectURL(res.blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = backupFilename();
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 5000);
+  triggerDownload(res.blob, backupFilename());
   hideParse();
   toast(`Exported ${res.count} book${res.count===1?"":"s"}. Import this file on another device to sync.`);
 }
@@ -429,13 +510,15 @@ async function shareBackup(){
   if(!res){ hideParse(); return; }
   hideParse();
   const file = new File([res.blob], backupFilename(), { type:"application/json" });
-  if(navigator.canShare && !navigator.canShare({ files:[file] })){ return exportLibrary(); }  // files unsupported → download
+  // Reuse the backup we just built for the download fallback — no rebuild, one clear message.
+  const saveInstead = ()=>{ triggerDownload(res.blob, backupFilename()); toast(`Saved your library as a file instead — import it on another device to sync.`); };
+  if(navigator.canShare && !navigator.canShare({ files:[file] })){ return saveInstead(); }  // files unsupported here
   try{
     await navigator.share({ files:[file], title:"Stillpoint library",
       text:"My Stillpoint library — open Stillpoint on the other device and tap “Import backup”." });
   }catch(err){
-    if(err && err.name==="AbortError") return;   // user dismissed the sheet — not an error
-    toast("Couldn't open the share sheet — exporting instead."); exportLibrary();
+    if(err && err.name==="AbortError") return;   // user dismissed the sheet — not an error, stay quiet
+    saveInstead();                               // share genuinely failed (common on desktop) → download once
   }
 }
 
@@ -512,6 +595,15 @@ function applyAids(){
     b.classList.toggle("active",on); b.setAttribute("aria-pressed", on?"true":"false");
   });
 }
+// Progressive disclosure: secondary controls collapse behind "Reading settings".
+// inert keeps the hidden controls out of the tab order while collapsed.
+function setSettingsOpen(open){
+  const wrap=$("moreWrap"), tg=$("settingsToggle");
+  wrap.classList.toggle("open", open);
+  tg.setAttribute("aria-expanded", open?"true":"false");
+  if(open) wrap.removeAttribute("inert"); else wrap.setAttribute("inert","");
+  settings.moreOpen = open;
+}
 
 /* ---------------- hero demo / how-it-works / share ----------------
    An auto-playing focal stream in the hero so the product demonstrates itself
@@ -537,7 +629,8 @@ function heroDemo(){
   document.addEventListener("visibilitychange",()=>{ document.hidden?stop():start(); });
   start();
 }
-function closeAbout(){ const a=$("about"); if(a) a.classList.remove("show"); }
+let aboutReturn=null;   // element focus returns to when the explainer closes
+function closeAbout(){ const a=$("about"); if(!a||!a.classList.contains("show")) return; a.classList.remove("show"); if(aboutReturn && aboutReturn.focus) aboutReturn.focus({preventScroll:true}); }
 
 // Turn a finished session into a shareable line — a natural completion → acquisition loop.
 async function shareResult(){
@@ -583,26 +676,37 @@ function init(){
 
   // "How it works" — opens the explainer modal (was a dead # link)
   const about=$("about");
-  const openAbout=()=>{ about.classList.add("show"); $("aboutClose").focus(); };
+  const openAbout=()=>{ aboutReturn=document.activeElement; about.classList.add("show"); $("aboutClose").focus(); };
   $("aboutLink").onclick=(e)=>{ e.preventDefault(); openAbout(); };
   $("aboutClose").onclick=closeAbout;
   about.addEventListener("click",e=>{ if(e.target===about) closeAbout(); });
-  document.addEventListener("keydown",e=>{ if(e.key==="Escape" && about.classList.contains("show")) closeAbout(); });
+
+  // modal keyboard: Escape dismisses, Tab stays trapped inside the open dialog
+  document.addEventListener("keydown",e=>{
+    const aboutOpen=about.classList.contains("show"), doneOpen=$("done").classList.contains("show");
+    if(!aboutOpen && !doneOpen) return;
+    if(e.key==="Escape"){ e.preventDefault(); aboutOpen ? closeAbout() : requestHome(); }
+    else if(e.key==="Tab"){ trapTab(aboutOpen ? about : $("done"), e); }
+  });
 
   $("doneShare").onclick=shareResult;
   heroDemo();
+  window.addEventListener("popstate",()=>{ if($("reader").classList.contains("show")) showLibrary(); });
 
   $("playBtn").onclick=toggle;
   $("backBtn").onclick=backSentence;
   $("fwdBtn").onclick=fwdSentence;
-  $("homeBtn").onclick=goHome;
-  $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); goHome(); }});
+  $("homeBtn").onclick=requestHome;
+  $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); requestHome(); }});
   // tap the reading area to play/pause (large, mobile-friendly target)
   $("stage").addEventListener("click",()=>{ toggle(); Haptics.trigger("light"); });
 
+  // Cmd/Ctrl+Enter begins reading straight from the paste box (lower friction than reaching for the button)
+  $("paste").addEventListener("keydown",e=>{ if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); $("pasteGo").click(); }});
+
   // session-complete screen
   $("doneAgain").onclick=()=>{ $("done").classList.remove("show"); S.index=0; S.readMs=0; play(); };
-  $("doneLib").onclick=goHome;
+  $("doneLib").onclick=requestHome;
 
   // auto-pause when the tab/window is hidden so you don't lose your place
   document.addEventListener("visibilitychange",()=>{ if(document.hidden && S.playing) pause(); });
@@ -611,6 +715,9 @@ function init(){
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render();});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
+
+  // "Reading settings" disclosure for the secondary controls
+  $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
 
   // reading-aid toggles (countdown / context line)
   document.querySelectorAll("#aidSeg button").forEach(b=>b.onclick=()=>{
@@ -634,18 +741,34 @@ function init(){
   window.addEventListener("mouseup",()=>dragging=false);
   track.addEventListener("touchstart",e=>scrubTo(e.touches[0].clientX),{passive:true});
   track.addEventListener("touchmove",e=>scrubTo(e.touches[0].clientX),{passive:true});
+  // keyboard scrubbing when the progress bar has focus (arrows step ~2%, Home/End jump)
+  track.addEventListener("keydown",e=>{
+    const total=S.tokens.length-1; if(total<1) return;
+    const step=Math.max(1, Math.round(total*0.02));
+    let handled=true;
+    if(e.code==="ArrowLeft"||e.code==="ArrowDown") jumpTo(S.index-step);
+    else if(e.code==="ArrowRight"||e.code==="ArrowUp") jumpTo(S.index+step);
+    else if(e.code==="Home") jumpTo(0);
+    else if(e.code==="End") jumpTo(total);
+    else handled=false;   // Space etc. falls through to play/pause
+    if(handled){ e.preventDefault(); e.stopPropagation(); }
+  });
 
   // keyboard
   document.addEventListener("keydown",e=>{
     if(!$("reader").classList.contains("show")) return;
+    if($("done").classList.contains("show")||$("about").classList.contains("show")) return;  // a modal owns the keyboard
     const tag=e.target.tagName;
-    if(tag==="TEXTAREA"||tag==="SELECT"||tag==="INPUT"||tag==="BUTTON"||e.target.getAttribute("role")==="button") return;
-    if(e.code==="Space"){e.preventDefault();toggle();}
+    if(tag==="TEXTAREA"||tag==="SELECT"||tag==="INPUT") return;   // don't hijack typing
+    if(e.code==="Space"){
+      if(tag==="BUTTON"||e.target.getAttribute("role")==="button") return;  // let a focused control activate itself
+      e.preventDefault();toggle();
+    }
     else if(e.code==="ArrowLeft"){e.preventDefault();backSentence();}
     else if(e.code==="ArrowRight"){e.preventDefault();fwdSentence();}
     else if(e.code==="ArrowUp"){e.preventDefault();setWpm(Math.min(800,S.wpm+25));}
     else if(e.code==="ArrowDown"){e.preventDefault();setWpm(Math.max(150,S.wpm-25));}
-    else if(e.code==="Escape"){goHome();}
+    else if(e.code==="Escape"){requestHome();}
   });
 
   // restore persisted prefs
@@ -655,12 +778,13 @@ function init(){
     if(prefs.mode) setMode(prefs.mode);
     if(typeof prefs.countdown==="boolean") settings.countdown=prefs.countdown;
     if(typeof prefs.context==="boolean") settings.context=prefs.context;
+    if(typeof prefs.moreOpen==="boolean") settings.moreOpen=prefs.moreOpen;
   }catch(e){}
-  setSize(S.size); setWpm(S.wpm); applyAids();
+  setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(settings.moreOpen);
 
   renderLibrary();
   window.addEventListener("beforeunload",()=>{
-    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context}));
+    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,moreOpen:settings.moreOpen}));
   });
 }
 
