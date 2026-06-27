@@ -297,8 +297,9 @@
   .parse-meta #parseEta{font-size:12.5px;color:var(--ink-mute);font-variant-numeric:tabular-nums;}
 
   /* ---------- Reader ---------- */
-  .reader{display:none;flex-direction:column;min-height:100vh;min-height:100dvh;}
+  .reader{display:none;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;}
   .reader.show{display:flex;}
+  .reader > .wrap{min-height:0;}   /* let the stage column shrink so the dock never overlaps it */
 
   .reader-top{display:flex;align-items:center;justify-content:space-between;padding:max(22px, calc(env(safe-area-inset-top) + 8px)) 0 4px;gap:16px;}
   .doc-title{display:flex;flex-direction:column;min-width:0;}
@@ -306,7 +307,9 @@
   .doc-title .meta{font-size:12px;color:var(--ink-mute);letter-spacing:.4px;margin-top:3px;}
 
   /* the stage */
-  .stage-shell{flex:1;display:flex;align-items:center;justify-content:center;padding:20px 0;position:relative;}
+  /* stretch the stage to fill its space so it shrinks gracefully on short screens
+     (with the dock expanded) instead of overflowing into the controls */
+  .stage-shell{flex:1;min-height:0;display:flex;align-items:stretch;justify-content:center;padding:20px 0;position:relative;}
   .stage{
     width:100%;max-width:880px;border-radius:var(--r-lg);position:relative;
     background:
@@ -314,7 +317,7 @@
       radial-gradient(760px 320px at 50% 52%, rgba(36,23,54,0.78), rgba(11,7,19,0.62));
     border:1px solid var(--hair);
     box-shadow:var(--e-3), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.4), inset 0 0 90px rgba(7,4,14,0.55);
-    padding:70px 30px;min-height:300px;display:flex;align-items:center;justify-content:center;
+    padding:70px 30px;min-height:0;display:flex;align-items:center;justify-content:center;
     overflow:hidden;cursor:pointer;
   }
   /* faint warm halo resting at the focal point — the jewel detail behind the word */
@@ -371,7 +374,7 @@
   .dock{
     border-top:1px solid var(--hair);background:rgba(10,6,20,0.74);backdrop-filter:blur(18px) saturate(1.1);
     box-shadow:0 -1px 0 rgba(255,255,255,0.04), 0 -24px 60px -30px rgba(0,0,0,0.8);
-    padding:16px 0 calc(26px + env(safe-area-inset-bottom));position:sticky;bottom:0;z-index:10;
+    padding:16px 0 calc(26px + env(safe-area-inset-bottom));z-index:10;flex-shrink:0;
   }
   .scrub{display:flex;align-items:center;gap:14px;margin-bottom:16px;}
   .scrub .time{font-size:12px;color:var(--ink-mute);font-variant-numeric:tabular-nums;flex:none;width:74px;}
@@ -454,7 +457,7 @@
     /* reader */
     .reader-top{padding:max(16px, calc(env(safe-area-inset-top) + 8px)) 0 2px;}
     .doc-title .t{max-width:52vw;font-size:16px;}
-    .stage{padding:46px 14px;min-height:230px;}
+    .stage{padding:46px 14px;min-height:0;}
     .stage .guide.top{top:40px;} .stage .guide.bot{bottom:40px;}
     /* tighter words + a sooner edge-fade so neighbours stay subtle hints on a narrow screen */
     .stage .ribbon{font-size:min(var(--read-size,62px),12vw);}
@@ -478,11 +481,18 @@
     .kbd-hint{display:none;}                       /* no hardware keyboard on touch */
   }
 
-  /* ---------- short viewport · landscape phones ---------- */
-  /* Triggers on any short viewport (height ≤ 540px) so it catches landscape phones
-     regardless of width — they're wider than the 680px phone breakpoint, so the
-     portrait rules don't apply. Compresses the reader so the stage + dock fit without scrolling. */
-  @media (max-height:540px){
+  /* medium-short viewports (e.g. phones with browser toolbars shown): trim the
+     stage so it stays readable as it shrinks with the dock expanded */
+  @media (max-height:700px){
+    .stage{padding:30px 18px;}
+    .stage-shell{padding:10px 0;}
+  }
+
+  /* ---------- short viewport · landscape phones + short portrait ---------- */
+  /* Triggers on any short viewport (height ≤ 600px) — landscape phones, and portrait
+     phones whose usable height is reduced by browser toolbars (e.g. iPhone SE). Compresses
+     the reader so the stage + the expanded dock fit without overlapping or scrolling. */
+  @media (max-height:600px){
     .reader-top{padding:calc(env(safe-area-inset-top) + 8px) 0 2px;}
     .stage-shell{padding:6px 0;}
     .stage{min-height:0;padding:24px 22px;}
@@ -490,7 +500,9 @@
     .stage .ribbon{font-size:min(var(--read-size,62px),12vw,30vh);}
     .stage .resting{font-size:21px;}
 
-    .dock{padding:10px 0 calc(8px + env(safe-area-inset-bottom));}
+    /* if the expanded dock is taller than the screen (tiny landscape phones), cap it and
+       let it scroll internally instead of overlapping the stage */
+    .dock{padding:10px 0 calc(8px + env(safe-area-inset-bottom));max-height:68vh;overflow-y:auto;}
     .scrub{margin-bottom:9px;}
     .transport{gap:16px;margin-bottom:9px;}
     .tbtn{width:42px;height:42px;}
