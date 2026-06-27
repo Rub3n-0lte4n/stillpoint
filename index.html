@@ -4,6 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#080510" />
+<!-- Standalone PWA on iOS: run full-screen with a transparent (not white) status bar.
+     The dark background flows under it; safe-area insets keep content clear of the clock. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Stillpoint" />
 <link rel="icon" type="image/png" href="favicon.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 <title>Stillpoint · Couture Reader</title>
@@ -95,7 +101,8 @@
       <div class="dz-icon">
         <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
       </div>
-      <h3>Drop a book or document here</h3>
+      <h3 class="dz-rest">Drop a book or document here</h3>
+      <h3 class="dz-drop">Release to open</h3>
       <div class="formats">or click to browse · <b>PDF</b> &nbsp;·&nbsp; <b>EPUB</b></div>
       <input type="file" id="fileInput" accept=".pdf,.epub,application/pdf,application/epub+zip" class="hidden" />
     </div>
@@ -160,7 +167,13 @@
     <div class="ring"></div>
     <h3 id="parseTitle">Opening your book…</h3>
     <p id="parseSub">Extracting text locally</p>
-    <div class="parse-bar"><i id="parseFill"></i></div>
+    <div class="file-chip hidden" id="fileChip">
+      <span class="fc-badge" id="fcBadge">PDF</span>
+      <span class="fc-name" id="fcName"></span>
+      <span class="fc-size" id="fcSize"></span>
+    </div>
+    <div class="parse-bar" aria-hidden="true"><i id="parseFill"></i></div>
+    <div class="parse-meta" aria-hidden="true"><span id="parsePct">0%</span><span id="parseEta"></span></div>
   </div>
 </div>
 
@@ -194,7 +207,7 @@
     <div class="wrap">
       <div class="scrub">
         <div class="time" id="tElapsed">0:00</div>
-        <div class="track" id="track" role="slider" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="trackFill"></div><div class="knob" id="trackKnob"></div></div>
+        <div class="track" id="track" role="slider" tabindex="0" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="trackFill"></div><div class="knob" id="trackKnob"></div></div>
         <div class="time r" id="tLeft">-0:00</div>
       </div>
 
@@ -204,7 +217,7 @@
         <button type="button" class="tbtn" id="fwdBtn" title="Forward a sentence (→)" aria-label="Forward a sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 5l7 7-7 7v-4H4v-6h9z"/></svg></button>
       </div>
 
-      <div class="controls">
+      <div class="controls primary">
         <div class="ctrl">
           <label>Mode</label>
           <div class="seg" id="modeSeg">
@@ -222,37 +235,47 @@
           </div>
         </div>
 
-        <div class="ctrl" id="chunkCtrl">
-          <label>Chunk</label>
-          <div class="seg" id="chunkSeg">
-            <button data-c="1" class="active">1</button>
-            <button data-c="2">2</button>
-            <button data-c="3">3</button>
-            <button data-c="4">4</button>
-          </div>
-        </div>
+        <button type="button" class="settings-toggle" id="settingsToggle" aria-expanded="false" aria-controls="moreControls">
+          <svg class="st-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+          <span>Reading settings</span>
+          <svg class="st-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
 
-        <div class="ctrl">
-          <label>Size</label>
-          <div class="seg" id="sizeSeg">
-            <button data-s="44">S</button>
-            <button data-s="62" class="active">M</button>
-            <button data-s="82">L</button>
-            <button data-s="104">XL</button>
+      <div class="more-wrap" id="moreWrap" inert>
+        <div class="controls more" id="moreControls">
+          <div class="ctrl" id="chunkCtrl">
+            <label>Chunk</label>
+            <div class="seg" id="chunkSeg">
+              <button data-c="1" class="active">1</button>
+              <button data-c="2">2</button>
+              <button data-c="3">3</button>
+              <button data-c="4">4</button>
+            </div>
           </div>
-        </div>
 
-        <div class="ctrl">
-          <label>Aids</label>
-          <div class="seg" id="aidSeg">
-            <button type="button" data-aid="countdown" class="active" aria-pressed="true">Countdown</button>
-            <button type="button" data-aid="context" class="active" aria-pressed="true">Context</button>
+          <div class="ctrl">
+            <label>Size</label>
+            <div class="seg" id="sizeSeg">
+              <button data-s="44">S</button>
+              <button data-s="62" class="active">M</button>
+              <button data-s="82">L</button>
+              <button data-s="104">XL</button>
+            </div>
           </div>
-        </div>
 
-        <div class="ctrl">
-          <label>Navigate</label>
-          <select class="nav-sel" id="navSel"></select>
+          <div class="ctrl">
+            <label>Aids</label>
+            <div class="seg" id="aidSeg">
+              <button type="button" data-aid="countdown" class="active" aria-pressed="true">Countdown</button>
+              <button type="button" data-aid="context" class="active" aria-pressed="true">Context</button>
+            </div>
+          </div>
+
+          <div class="ctrl">
+            <label>Navigate</label>
+            <select class="nav-sel" id="navSel"></select>
+          </div>
         </div>
       </div>
 
