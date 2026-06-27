@@ -634,14 +634,17 @@ function closeAbout(){ const a=$("about"); if(!a||!a.classList.contains("show"))
 
 // Turn a finished session into a shareable line — a natural completion → acquisition loop.
 async function shareResult(){
-  const text=`I just finished “${S.title}” on Stillpoint — ${$("stWords").textContent} words in ${$("stTime").textContent}, at ${$("stWpm").textContent} wpm. A calm, private speed-reader that runs entirely in your browser.`;
   const url="https://rub3n-0lte4n.github.io/stillpoint/";
+  const text=`I just finished “${S.title}” on Stillpoint — ${$("stWords").textContent} words in ${$("stTime").textContent}, at ${$("stWpm").textContent} wpm. A calm, private speed-reader that runs entirely in your browser.`;
+  // Fold the link into the text and DON'T pass a separate `url` — when both are given,
+  // most share targets keep only the url and drop the stats. One text block keeps both.
+  const message=`${text} ${url}`;
   if(navigator.share){
-    try{ await navigator.share({ title:"Stillpoint", text, url }); }
-    catch(err){ if(!(err && err.name==="AbortError")){ /* fall through to copy below on real failure */ try{ await navigator.clipboard.writeText(text+" "+url); toast("Result copied — paste it anywhere to share."); }catch(e){} } }
+    try{ await navigator.share({ title:"Stillpoint", text:message }); }
+    catch(err){ if(!(err && err.name==="AbortError")){ try{ await navigator.clipboard.writeText(message); toast("Result copied — paste it anywhere to share."); }catch(e){} } }
     return;
   }
-  try{ await navigator.clipboard.writeText(text+" "+url); toast("Result copied — paste it anywhere to share."); }
+  try{ await navigator.clipboard.writeText(message); toast("Result copied — paste it anywhere to share."); }
   catch(e){ toast("Couldn't copy automatically — long-press to copy your result."); }
 }
 
