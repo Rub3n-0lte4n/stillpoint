@@ -32,4 +32,7 @@ export const Store = {
   // schema/VERSION bump. Tiny + book-scoped, so pruneStore() retains these keys.
   getBlockMode: (docKey)=> tx("readonly",  s=>s.get("blockmode::"+docKey)),
   putBlockMode: (docKey, val)=> tx("readwrite", s=>s.put(val, "blockmode::"+docKey)),
+  // Per-document highlight ranges (index-based, re-anchor on reopen). Namespaced key.
+  getHighlights: (docKey)=> tx("readonly",  s=>s.get("hl::"+docKey)),
+  putHighlights: (docKey, val)=> tx("readwrite", s=>s.put(val, "hl::"+docKey)),
 };
