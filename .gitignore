@@ -1,0 +1,7 @@
+
+# graphify generated knowledge-graph output
+graphify-out/
+
+# dev-only test tooling (app itself stays no-build)
+node_modules/
+package-lock.json

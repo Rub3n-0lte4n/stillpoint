@@ -1,0 +1,29 @@
+{
+  "name": "stillpoint",
+  "version": "1.0.0",
+  "description": "Stillpoint — dev-only test tooling (the app itself ships as plain files, no build)",
+  "main": "sw.js",
+  "directories": {
+    "doc": "docs",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node test/phase1.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rub3n-0lte4n/stillpoint.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/Rub3n-0lte4n/stillpoint/issues"
+  },
+  "homepage": "https://github.com/Rub3n-0lte4n/stillpoint#readme",
+  "devDependencies": {
+    "jszip": "^3.10.1",
+    "linkedom": "^0.18.12"
+  }
+}

@@ -199,6 +199,34 @@
         <div class="word hidden" id="word" aria-hidden="true"></div>
         <div class="ribbon-clip"><div class="ribbon hidden" id="ribbon" aria-hidden="true"></div></div>
       </div>
+
+      <!-- Block still card: full presentation over the stage -->
+      <div class="block-card hidden" id="blockCard" role="dialog" aria-modal="true" aria-labelledby="bcKind">
+        <div class="bc-head">
+          <span class="bc-kind" id="bcKind">Table</span>
+          <span class="bc-unit" id="bcUnit"></span>
+          <button type="button" class="bc-dismiss hidden" id="bcDismiss">Not a figure — dismiss</button>
+        </div>
+        <div class="bc-body" id="bcBody"></div>
+        <div class="bc-actions">
+          <button type="button" class="btn ghost hidden" id="bcViewPage">View page</button>
+          <button type="button" class="btn gold" id="bcResume">Resume reading →</button>
+        </div>
+      </div>
+
+      <!-- Full page view (hybrid mode) -->
+      <div class="page-view hidden" id="pageView" role="dialog" aria-modal="true" aria-labelledby="pvTitle">
+        <div class="pv-head"><span id="pvTitle">Chapter</span>
+          <button type="button" class="btn ghost" id="pvBack">← Back to reading</button></div>
+        <div class="pv-scroll" id="pvScroll"></div>
+      </div>
+
+      <!-- Document-level Figures & Tables index -->
+      <div class="figindex hidden" id="figIndex" role="dialog" aria-modal="true" aria-labelledby="fiTitle">
+        <div class="fi-head"><h3 id="fiTitle">Figures &amp; Tables</h3>
+          <button type="button" class="fi-x" id="fiClose" aria-label="Close">✕</button></div>
+        <div class="fi-list" id="fiList"></div>
+      </div>
     </div>
   </div>
 
@@ -214,6 +242,7 @@
         <button type="button" class="tbtn" id="backBtn" title="Back a sentence (←)" aria-label="Back a sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 19l-7-7 7-7v4h9v6h-9z"/></svg></button>
         <button type="button" class="tbtn play" id="playBtn" title="Play / pause (space)" aria-label="Play"><svg viewBox="0 0 24 24" id="playIcon" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
         <button type="button" class="tbtn" id="fwdBtn" title="Forward a sentence (→)" aria-label="Forward a sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 5l7 7-7 7v-4H4v-6h9z"/></svg></button>
+        <button type="button" class="tbtn mark" id="markBtn" title="Mark sentence (M) · long-press for word" aria-label="Mark this passage" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg></button>
       </div>
 
       <div class="controls primary">
@@ -239,6 +268,8 @@
           <span>Reading settings</span>
           <svg class="st-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
         </button>
+
+        <button type="button" class="figindex-toggle hidden" id="figIndexToggle">Figures &amp; Tables</button>
       </div>
 
       <div class="more-wrap" id="moreWrap" inert>
@@ -268,6 +299,7 @@
             <div class="seg" id="aidSeg">
               <button type="button" data-aid="countdown" class="active" aria-pressed="true">Countdown</button>
               <button type="button" data-aid="context" class="active" aria-pressed="true">Context</button>
+              <button type="button" data-aid="smartPacing" class="active" aria-pressed="true" title="Slow down on long/complex sentences">Smart pace</button>
             </div>
           </div>
 
@@ -275,11 +307,22 @@
             <label>Navigate</label>
             <select class="nav-sel" id="navSel"></select>
           </div>
+
+          <div class="ctrl hidden" id="blockModeCtrl">
+            <label>Tables &amp; images</label>
+            <div class="seg" id="blockModeSeg">
+              <button type="button" data-bm="pause" class="active">Pause &amp; show</button>
+              <button type="button" data-bm="hybrid">Page view</button>
+              <button type="button" data-bm="skip">Collect</button>
+            </div>
+            <button type="button" class="linklike" id="blockModeAdvanced">Per-type…</button>
+            <div class="bmg hidden" id="blockModeGrid"></div>
+          </div>
         </div>
       </div>
 
       <div class="kbd-hint">
-        <kbd>Space</kbd> play/pause &nbsp; <kbd>←</kbd><kbd>→</kbd> sentence &nbsp; <kbd>↑</kbd><kbd>↓</kbd> speed &nbsp; <kbd>Esc</kbd> library
+        <kbd>Space</kbd> play/pause &nbsp; <kbd>←</kbd><kbd>→</kbd> sentence &nbsp; <kbd>⇧←</kbd> back 10 &nbsp; <kbd>↑</kbd><kbd>↓</kbd> speed &nbsp; <kbd>M</kbd> mark &nbsp; <kbd>R</kbd> replay &nbsp; <kbd>Esc</kbd> library
       </div>
     </div>
   </div>
@@ -297,9 +340,24 @@
       <div><b id="stWpm">0</b><span>avg wpm</span></div>
     </div>
     <div class="done-actions">
+      <button type="button" class="btn ghost" id="doneReview">Review highlights</button>
       <button type="button" class="btn ghost" id="doneShare">Share result</button>
       <button type="button" class="btn ghost" id="doneAgain">Read again</button>
       <button type="button" class="btn gold" id="doneLib">Back to library</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ HIGHLIGHTS REVIEW ============ -->
+<div class="review" id="review">
+  <div class="review-card" role="dialog" aria-modal="true" aria-labelledby="rvTitle">
+    <div class="rv-head">
+      <h3 id="rvTitle">Your highlights</h3>
+      <button type="button" class="rv-x" id="rvClose" aria-label="Close">✕</button>
+    </div>
+    <div class="rv-list" id="rvList"></div>
+    <div class="rv-foot">
+      <button type="button" class="btn gold" id="rvExport">Export as Markdown</button>
     </div>
   </div>
 </div>
