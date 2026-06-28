@@ -28,4 +28,8 @@ export const Store = {
   get: (key)=> tx("readonly",  s=>s.get(key)),
   del: (key)=> tx("readwrite", s=>s.delete(key)),
   keys:()=> tx("readonly",  s=>s.getAllKeys()),
+  // Per-document block-presentation preference. Same store, namespaced key — no
+  // schema/VERSION bump. Tiny + book-scoped, so pruneStore() retains these keys.
+  getBlockMode: (docKey)=> tx("readonly",  s=>s.get("blockmode::"+docKey)),
+  putBlockMode: (docKey, val)=> tx("readwrite", s=>s.put(val, "blockmode::"+docKey)),
 };

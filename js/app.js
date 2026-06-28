@@ -3,6 +3,7 @@ import { tokenize, orpIndex, esc, DEMO, HERO } from "./text.js";
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
+import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, firstBlockInRange, isAutoDetected } from "./blockmode.js";
 
 /* ---------------- state ---------------- */
 const S = {
@@ -21,7 +22,16 @@ const S = {
   readMs: 0,           // accumulated active reading time (excludes pauses)
   playStart: null,     // wall-clock when the current run started streaming
   rampStart: 0,        // token index where the current run began (for speed ramp)
+  // --- Phase 2: non-linear blocks ---
+  blocks: [],          // sidecar from the parser: [{id, after, kind, payload, unit}]
+  sortedBlocks: [],    // indexBlocks(blocks) — sorted by `after` for hot-loop lookup
+  blockMode: null,     // per-document preference {default, <kind> overrides, dismissed[]}
+  shownBlocks: null,   // Set of block ids already presented/collected this session
+  collected: [],       // skip+collect entries (in document order)
+  cardOpen: false,     // a still card / page view is currently raised
 };
+const KIND_LABEL = { table:"Table", image:"Image", figure:"Figure", equation:"Equation", code:"Code", quote:"Quote" };
+function modeForKind(kind){ return resolveMode(S.blockMode, kind); }
 const $ = (id) => document.getElementById(id);
 const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const REWIND_WORDS = 5;   // back up on resume for re-orientation
@@ -123,9 +133,24 @@ function step(){
   const longest = Math.max(...chunkTokens.map(t=>t.w.length));
   if(longest>8) delay += perWord*0.25;
 
+  const prev = S.index;
   S.index += S.chunk;
   updateProgress();
   saveProgress();
+
+  // Phase 2: did the chunk we just consumed cross a block? Cheap no-op for prose.
+  if(S.sortedBlocks.length){
+    const hit = firstBlockInRange(S.sortedBlocks, prev, S.index, dismissedSet(), S.shownBlocks);
+    if(hit){
+      const m = modeForKind(hit.kind);
+      if(m === "skip"){
+        collectBlock(hit);                 // route to appendix/index — do NOT halt
+      } else {
+        presentBlock(hit, m);              // pause/hybrid — halt the stream, return
+        return;
+      }
+    }
+  }
   S.timer = setTimeout(()=>{ if(S.playing) step(); }, delay);
 }
 function play(){
@@ -211,6 +236,162 @@ function fwdSentence(){
   jumpTo(Math.min(S.tokens.length-1, i+1));
 }
 
+/* ---------------- Phase 2: non-linear blocks ----------------
+   When the stream crosses a captured block (table/image/figure/quote/code), the
+   reader either halts and shows it (pause/hybrid) or collects it into an appendix
+   + a document index (skip), per the per-document blockMode. */
+function dismissedSet(){ return S.dismissed || (S.dismissed = new Set()); }
+function normalizeBlockMode(v){
+  const bm = Object.assign(defaultBlockMode(), v||{});
+  if(!Array.isArray(bm.dismissed)) bm.dismissed = [];
+  return bm;
+}
+function unitTitle(i){ return (S.units[i] && S.units[i].title) || "Section"; }
+function presentKinds(){ return [...new Set(S.blocks.map(b=>b.kind))]; }
+
+// Render a block's payload into an element. Image → <img>; sanitized html → innerHTML
+// (Phase 1 stripped script/style/on*/javascript:, so it is trusted by construction).
+function renderBlockInto(el, block){
+  el.innerHTML = "";
+  const p = block && block.payload;
+  if(p && p.type==="image"){
+    const img=document.createElement("img");
+    img.src = p.dataUrl || p.blobUrl || ""; img.alt = p.alt || KIND_LABEL[block.kind] || "";
+    el.appendChild(img);
+  } else if(p && p.type==="html" && typeof p.html==="string"){
+    el.innerHTML = p.html;
+  } else {
+    el.innerHTML = `<p class="bc-empty">Couldn’t render this ${esc((block&&block.kind)||"block")}.</p>`;
+  }
+}
+
+// pause/hybrid — halt the stream and raise the still card.
+function presentBlock(block, mode){
+  clearTimeout(S.timer);
+  S.cardOpen = true; S.previewing = false; S.currentBlock = block;
+  $("ribbon").classList.remove("playing");
+  $("bcKind").textContent = KIND_LABEL[block.kind] || "Block";
+  $("bcUnit").textContent = unitTitle(block.unit);
+  renderBlockInto($("bcBody"), block);
+  $("bcViewPage").classList.toggle("hidden", mode!=="hybrid");
+  $("bcDismiss").classList.toggle("hidden", !isAutoDetected(block));
+  $("bcResume").textContent = "Resume reading →";
+  $("blockCard").classList.remove("hidden");
+  Haptics.trigger("light");
+  $("bcResume").focus({preventScroll:true});
+}
+
+// Resume button / Space / stage-tap while a card is up.
+function resumeFromCard(){
+  if(!S.cardOpen) return;
+  const b = S.currentBlock;
+  const wasPreview = S.previewing;
+  if(b && !wasPreview) S.shownBlocks.add(b.id);
+  hideBlockUI();
+  if(wasPreview) return;            // previewing a collected block doesn't move the stream
+  S.rampStart = S.index;
+  if(S.playing) step();
+}
+
+// skip — never interrupt; collect into the appendix + document index.
+function collectBlock(block){
+  if(S.shownBlocks.has(block.id)) return;
+  S.shownBlocks.add(block.id);
+  S.collected.push(block);
+  $("figIndexToggle").classList.remove("hidden");
+  renderFigIndex();
+}
+
+// Suppress an auto-detected false positive for this document (persisted).
+function dismissBlock(block){
+  const id = block.id;
+  S.shownBlocks.add(id);
+  if(!S.blockMode.dismissed.includes(id)) S.blockMode.dismissed.push(id);
+  dismissedSet().add(id);
+  S.collected = S.collected.filter(b=>b.id!==id);
+  renderFigIndex();
+  persistBlockMode();
+  hideBlockUI();
+  toast("Dismissed — won’t show again in this document", { action:"Undo", onAction:()=>{
+    S.blockMode.dismissed = S.blockMode.dismissed.filter(x=>x!==id);
+    dismissedSet().delete(id); S.shownBlocks.delete(id);
+    persistBlockMode();
+  }});
+  S.rampStart = S.index;
+  if(S.playing) step();
+}
+
+// Preview a collected block from the index (does not move the reading position).
+function previewBlock(block){
+  if(S.playing) pause();
+  S.cardOpen = true; S.previewing = true; S.currentBlock = block;
+  $("bcKind").textContent = KIND_LABEL[block.kind] || "Block";
+  $("bcUnit").textContent = unitTitle(block.unit);
+  renderBlockInto($("bcBody"), block);
+  $("bcViewPage").classList.add("hidden");
+  $("bcDismiss").classList.toggle("hidden", !isAutoDetected(block));
+  $("bcResume").textContent = "Close";
+  $("blockCard").classList.remove("hidden");
+  $("bcResume").focus({preventScroll:true});
+}
+
+function openPageView(){
+  const b = S.currentBlock; if(!b) return;
+  $("pvTitle").textContent = unitTitle(b.unit);
+  renderBlockInto($("pvScroll"), b);
+  $("pageView").classList.remove("hidden");
+  $("pvBack").focus({preventScroll:true});
+}
+function closePageView(){ $("pageView").classList.add("hidden"); if(S.cardOpen) $("bcResume").focus({preventScroll:true}); }
+function hideBlockUI(){ $("blockCard").classList.add("hidden"); $("pageView").classList.add("hidden"); $("figIndex").classList.add("hidden"); S.cardOpen=false; S.previewing=false; }
+
+/* document-level Figures & Tables index */
+function renderFigIndex(){
+  const list=$("fiList"); if(!list) return;
+  list.innerHTML="";
+  if(!S.collected.length){ list.innerHTML = `<p class="fi-empty">Nothing collected yet.</p>`; return; }
+  const byUnit=new Map();
+  for(const b of S.collected){ if(!byUnit.has(b.unit)) byUnit.set(b.unit, []); byUnit.get(b.unit).push(b); }
+  for(const [unit, items] of byUnit){
+    const h=document.createElement("div"); h.className="fi-group"; h.textContent=unitTitle(unit); list.appendChild(h);
+    items.forEach((b,i)=>{
+      const row=document.createElement("button"); row.type="button"; row.className="fi-item";
+      row.innerHTML = `<span class="fi-glyph">${esc(KIND_LABEL[b.kind]||"Block")}</span>`+
+                      `<span class="fi-cap">${esc(KIND_LABEL[b.kind]||"Block")} ${i+1}</span>`;
+      row.onclick=()=>{ closeFigIndex(); previewBlock(b); };
+      list.appendChild(row);
+    });
+  }
+}
+function openFigIndex(){ renderFigIndex(); $("figIndex").classList.remove("hidden"); $("fiClose").focus({preventScroll:true}); }
+function closeFigIndex(){ $("figIndex").classList.add("hidden"); }
+
+/* settings: global mode + per-kind overrides */
+function syncBlockModeUI(){
+  const def = (S.blockMode && S.blockMode.default) || "pause";
+  document.querySelectorAll("#blockModeSeg button").forEach(b=>b.classList.toggle("active", b.dataset.bm===def));
+  renderBlockModeGrid();
+}
+function setBlockModeDefault(m){ S.blockMode.default = m; syncBlockModeUI(); persistBlockMode(); }
+function setKindMode(kind, m){ if(m==="default") delete S.blockMode[kind]; else S.blockMode[kind]=m; syncBlockModeUI(); persistBlockMode(); }
+function renderBlockModeGrid(){
+  const grid=$("blockModeGrid"); if(!grid) return;
+  grid.innerHTML="";
+  for(const kind of presentKinds()){
+    const cur = S.blockMode[kind] || "default";
+    const row=document.createElement("div"); row.className="bmg-row";
+    row.innerHTML = `<span class="bmg-kind">${esc(KIND_LABEL[kind]||kind)}</span>`;
+    const seg=document.createElement("div"); seg.className="seg bmg-seg";
+    [["default","Default"],["pause","Pause"],["hybrid","Page"],["skip","Collect"]].forEach(([v,label])=>{
+      const btn=document.createElement("button"); btn.type="button"; btn.textContent=label;
+      btn.className = (cur===v)?"active":""; btn.onclick=()=>setKindMode(kind, v);
+      seg.appendChild(btn);
+    });
+    row.appendChild(seg); grid.appendChild(row);
+  }
+}
+function persistBlockMode(){ if(S.key) Store.putBlockMode(S.key, S.blockMode).catch(()=>{}); }
+
 /* ---------------- progress + scrubber ---------------- */
 function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
 function updateProgress(){
@@ -224,6 +405,19 @@ function updateProgress(){
   if(S.units.length>1){
     let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=S.index) u=k; }
     if($("navSel").selectedIndex!==u) $("navSel").selectedIndex=u;
+    // Phase 2: crossing into a new unit surfaces the just-finished chapter's appendix
+    // (collected figures/tables) as a non-blocking, dismissible affordance.
+    if(S.collected && S.collected.length && u !== S.lastUnit){
+      const finished = S.lastUnit;
+      const inUnit = S.collected.filter(b=>b.unit===finished);
+      const seen = S.apxShown || (S.apxShown = new Set());
+      if(inUnit.length && !seen.has(finished)){
+        seen.add(finished);
+        toast(`${inUnit.length} ${inUnit.length===1?"figure/table":"figures & tables"} in “${unitTitle(finished)}”`,
+              { action:"View", onAction:openFigIndex });
+      }
+    }
+    S.lastUnit = u;
   }
 }
 
@@ -288,12 +482,32 @@ function removeItem(item){
 }
 
 /* ---------------- loading a document ---------------- */
-function openReader(tokens, units, title, meta, key){
+function openReader(tokens, units, title, meta, key, blocks){
   S.tokens=tokens; S.units=units&&units.length?units:[{title:"Start",start:0}];
   S.title=title; S.meta=meta; S.key=key; S.index=0;
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   const prior = loadLib().find(x=>x.key===key);
   if(prior && prior.index>0 && prior.index<tokens.length) S.index=prior.index;
+
+  // Phase 2: block sidecar + per-document presentation mode.
+  S.blocks = Array.isArray(blocks) ? blocks : [];
+  S.sortedBlocks = indexBlocks(S.blocks);
+  S.shownBlocks = new Set();
+  S.collected = [];
+  S.cardOpen = false; S.lastUnit = 0;
+  hideBlockUI();
+  S.blockMode = defaultBlockMode();
+  S.dismissed = new Set(S.blockMode.dismissed);
+  $("figIndexToggle").classList.add("hidden");
+  $("blockModeCtrl").classList.toggle("hidden", S.blocks.length===0);
+  if(S.blocks.length){
+    Store.getBlockMode(key).then(v=>{
+      if(v && S.key===key){ S.blockMode = normalizeBlockMode(v); S.dismissed = new Set(S.blockMode.dismissed); }
+      syncBlockModeUI();
+    }).catch(()=>syncBlockModeUI());
+  }
+  syncBlockModeUI();
+  renderFigIndex();
 
   $("docTitle").textContent=title;
   $("docMeta").textContent=meta;
@@ -320,7 +534,13 @@ async function persist(key, rec){
 async function pruneStore(){
   try{
     const keep = new Set(loadLib().map(x=>x.key));
-    for(const k of await Store.keys()){ if(!keep.has(k)) await Store.del(k); }
+    for(const k of await Store.keys()){
+      // retain a cached file for a live library entry, or a blockmode:: pref whose
+      // document is still in the library (tiny, book-scoped).
+      if(keep.has(k)) continue;
+      if(typeof k==="string" && k.startsWith("blockmode::") && keep.has(k.slice("blockmode::".length))) continue;
+      await Store.del(k);
+    }
   }catch(e){}
 }
 // Reopen a recent item straight from the device.
@@ -336,11 +556,11 @@ async function openFromStore(item){
   showParse("Opening "+item.title+"…","Reading from this device",{kind:rec.kind,name:rec.name||item.title,size:rec.blob?rec.blob.size:0});
   try{
     if(rec.kind==="pdf"){
-      const {tokens,units,pages}=await parsePDF(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key);
+      const {tokens,units,pages,blocks}=await parsePDF(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key,blocks);
     } else {
-      const {tokens,units,chapters}=await parseEPUB(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key);
+      const {tokens,units,chapters,blocks}=await parseEPUB(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key,blocks);
     }
   }catch(err){ hideParse(); toast("Couldn't reopen that file — "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>openFromStore(item)}); }
 }
@@ -387,14 +607,14 @@ async function handleFile(file){
   showParse("Opening "+name+"…", "Extracting text locally", {kind, name:file.name, size:file.size});
   try{
     if(kind==="pdf"){
-      const {tokens,units,pages}=await parsePDF(file, setParse);
+      const {tokens,units,pages,blocks}=await parsePDF(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key);
+      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key,blocks);
       persist(key,{kind:"pdf",blob:file,name:file.name});
     } else {
-      const {tokens,units,chapters}=await parseEPUB(file, setParse);
+      const {tokens,units,chapters,blocks}=await parseEPUB(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key);
+      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key,blocks);
       persist(key,{kind:"epub",blob:file,name:file.name});
     }
   }catch(err){
@@ -481,7 +701,9 @@ async function buildBackup(){
     if(rec.kind==="text") files.push({ key:item.key, kind:"text", name:rec.name||item.title, text:rec.text });
     else if(rec.blob)     files.push({ key:item.key, kind:rec.kind, name:rec.name||item.title, data:await blobToDataURL(rec.blob) });
   }
-  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files };
+  const blockModes = {};
+  for(const item of lib){ try{ const bm = await Store.getBlockMode(item.key); if(bm) blockModes[item.key]=bm; }catch(e){} }
+  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes };
   return { blob:new Blob([JSON.stringify(backup)], { type:"application/json" }), count:files.length };
 }
 
@@ -548,6 +770,8 @@ async function importBackup(file){
       if(!ex || (it.ts||0) > (ex.ts||0)) byKey.set(it.key, it);
     }
     saveLib([...byKey.values()].sort((a,b)=>(b.ts||0)-(a.ts||0)));
+    // Restore per-document block-presentation modes alongside the books.
+    if(data.blockModes){ for(const [k,v] of Object.entries(data.blockModes)){ try{ await Store.putBlockMode(k, v); }catch(e){} } }
     await pruneStore();
     // Restore settings if the backup carried them.
     if(data.prefs){
@@ -702,7 +926,7 @@ function init(){
   $("homeBtn").onclick=requestHome;
   $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); requestHome(); }});
   // tap the reading area to play/pause (large, mobile-friendly target)
-  $("stage").addEventListener("click",()=>{ toggle(); Haptics.trigger("light"); });
+  $("stage").addEventListener("click",()=>{ if(S.cardOpen){ resumeFromCard(); return; } toggle(); Haptics.trigger("light"); });
 
   // Cmd/Ctrl+Enter begins reading straight from the paste box (lower friction than reaching for the button)
   $("paste").addEventListener("keydown",e=>{ if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); $("pasteGo").click(); }});
@@ -721,6 +945,19 @@ function init(){
 
   // "Reading settings" disclosure for the secondary controls
   $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
+
+  // Phase 2: block still-card / page view / figures index wiring
+  $("bcResume").onclick=resumeFromCard;
+  $("bcViewPage").onclick=openPageView;
+  $("bcDismiss").onclick=()=>{ if(S.currentBlock) dismissBlock(S.currentBlock); };
+  $("pvBack").onclick=closePageView;
+  $("fiClose").onclick=closeFigIndex;
+  $("figIndexToggle").onclick=openFigIndex;
+  // tap the card chrome (not its body/buttons) to resume
+  $("blockCard").addEventListener("click",e=>{ if(e.target.id==="blockCard" || (e.target.classList&&e.target.classList.contains("bc-head"))) resumeFromCard(); });
+  // block presentation mode: global segment + per-type overrides
+  document.querySelectorAll("#blockModeSeg button").forEach(b=>b.onclick=()=>{ setBlockModeDefault(b.dataset.bm); Haptics.trigger("light"); });
+  $("blockModeAdvanced").onclick=()=>{ $("blockModeGrid").classList.toggle("hidden"); };
 
   // reading-aid toggles (countdown / context line)
   document.querySelectorAll("#aidSeg button").forEach(b=>b.onclick=()=>{
@@ -761,6 +998,15 @@ function init(){
   document.addEventListener("keydown",e=>{
     if(!$("reader").classList.contains("show")) return;
     if($("done").classList.contains("show")||$("about").classList.contains("show")) return;  // a modal owns the keyboard
+    // Phase 2: an open block card / page view / figures index owns the keyboard
+    const fiOpen=!$("figIndex").classList.contains("hidden");
+    if(S.cardOpen || fiOpen){
+      const pvOpen=!$("pageView").classList.contains("hidden");
+      if(e.code==="Escape"){ e.preventDefault(); if(fiOpen) closeFigIndex(); else if(pvOpen) closePageView(); else resumeFromCard(); return; }
+      if(e.code==="Tab"){ trapTab(fiOpen?$("figIndex"):(pvOpen?$("pageView"):$("blockCard")), e); return; }
+      if(e.code==="Space" && !fiOpen && !pvOpen){ if(e.target.tagName==="BUTTON") return; e.preventDefault(); resumeFromCard(); return; }
+      return;
+    }
     const tag=e.target.tagName;
     if(tag==="TEXTAREA"||tag==="SELECT"||tag==="INPUT") return;   // don't hijack typing
     if(e.code==="Space"){
