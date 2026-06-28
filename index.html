@@ -199,6 +199,34 @@
         <div class="word hidden" id="word" aria-hidden="true"></div>
         <div class="ribbon-clip"><div class="ribbon hidden" id="ribbon" aria-hidden="true"></div></div>
       </div>
+
+      <!-- Block still card: full presentation over the stage -->
+      <div class="block-card hidden" id="blockCard" role="dialog" aria-modal="true" aria-labelledby="bcKind">
+        <div class="bc-head">
+          <span class="bc-kind" id="bcKind">Table</span>
+          <span class="bc-unit" id="bcUnit"></span>
+          <button type="button" class="bc-dismiss hidden" id="bcDismiss">Not a figure — dismiss</button>
+        </div>
+        <div class="bc-body" id="bcBody"></div>
+        <div class="bc-actions">
+          <button type="button" class="btn ghost hidden" id="bcViewPage">View page</button>
+          <button type="button" class="btn gold" id="bcResume">Resume reading →</button>
+        </div>
+      </div>
+
+      <!-- Full page view (hybrid mode) -->
+      <div class="page-view hidden" id="pageView" role="dialog" aria-modal="true" aria-labelledby="pvTitle">
+        <div class="pv-head"><span id="pvTitle">Chapter</span>
+          <button type="button" class="btn ghost" id="pvBack">← Back to reading</button></div>
+        <div class="pv-scroll" id="pvScroll"></div>
+      </div>
+
+      <!-- Document-level Figures & Tables index -->
+      <div class="figindex hidden" id="figIndex" role="dialog" aria-modal="true" aria-labelledby="fiTitle">
+        <div class="fi-head"><h3 id="fiTitle">Figures &amp; Tables</h3>
+          <button type="button" class="fi-x" id="fiClose" aria-label="Close">✕</button></div>
+        <div class="fi-list" id="fiList"></div>
+      </div>
     </div>
   </div>
 
@@ -239,6 +267,8 @@
           <span>Reading settings</span>
           <svg class="st-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
         </button>
+
+        <button type="button" class="figindex-toggle hidden" id="figIndexToggle">Figures &amp; Tables</button>
       </div>
 
       <div class="more-wrap" id="moreWrap" inert>
@@ -274,6 +304,17 @@
           <div class="ctrl">
             <label>Navigate</label>
             <select class="nav-sel" id="navSel"></select>
+          </div>
+
+          <div class="ctrl hidden" id="blockModeCtrl">
+            <label>Tables &amp; images</label>
+            <div class="seg" id="blockModeSeg">
+              <button type="button" data-bm="pause" class="active">Pause &amp; show</button>
+              <button type="button" data-bm="hybrid">Page view</button>
+              <button type="button" data-bm="skip">Collect</button>
+            </div>
+            <button type="button" class="linklike" id="blockModeAdvanced">Per-type…</button>
+            <div class="bmg hidden" id="blockModeGrid"></div>
           </div>
         </div>
       </div>
