@@ -1,8 +1,10 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
-import { tokenize, orpIndex, esc, DEMO, HERO } from "./text.js";
+import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd } from "./text.js";
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
+import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, firstBlockInRange, isAutoDetected } from "./blockmode.js";
+import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exportMarkdown } from "./highlights.js";
 
 /* ---------------- state ---------------- */
 const S = {
@@ -21,13 +23,26 @@ const S = {
   readMs: 0,           // accumulated active reading time (excludes pauses)
   playStart: null,     // wall-clock when the current run started streaming
   rampStart: 0,        // token index where the current run began (for speed ramp)
+  // --- Phase 2: non-linear blocks ---
+  blocks: [],          // sidecar from the parser: [{id, after, kind, payload, unit}]
+  sortedBlocks: [],    // indexBlocks(blocks) — sorted by `after` for hot-loop lookup
+  blockMode: null,     // per-document preference {default, <kind> overrides, dismissed[]}
+  shownBlocks: null,   // Set of block ids already presented/collected this session
+  collected: [],       // skip+collect entries (in document order)
+  cardOpen: false,     // a still card / page view is currently raised
+  // --- Phase 3: retention aids ---
+  sentenceFactor: null,// Float32Array — per-token smart-pacing slowdown factor
+  highlights: [],      // [{start,end,unit,ts}] marked ranges for this document
+  hlUnitShown: null,   // Set of units whose end-of-chapter review toast was offered
 };
+const KIND_LABEL = { table:"Table", image:"Image", figure:"Figure", equation:"Equation", code:"Code", quote:"Quote" };
+function modeForKind(kind){ return resolveMode(S.blockMode, kind); }
 const $ = (id) => document.getElementById(id);
 const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const REWIND_WORDS = 5;   // back up on resume for re-orientation
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
-const settings = { countdown:true, context:true, moreOpen:false };  // reading aids + dock state (persisted)
+const settings = { countdown:true, context:true, smartPacing:true, moreOpen:false };  // reading aids + dock state (persisted)
 
 /* ---------------- centred ribbon ----------------
    One centred line of words. The current word's pivot letter is snapped onto the
@@ -114,18 +129,38 @@ function step(){
   // gentle speed ramp: ease from RAMP_MIN up to full WPM over the first words of a run
   const since = S.index - S.rampStart;
   const ramp = Math.min(1, RAMP_MIN + (1-RAMP_MIN)*(since/RAMP_WORDS));
-  const perWord = 60000 / (S.wpm * ramp);
+  // Phase 3 smart pacing: per-sentence complexity factor (1.0 for plain prose).
+  const sp = settings.smartPacing;
+  const f = (sp && S.sentenceFactor && S.sentenceFactor[S.index]) ? S.sentenceFactor[S.index] : 1;
+  const perWord = (60000 / (S.wpm * ramp)) * f;
 
   let delay = perWord * chunkTokens.length;
   const last = chunkTokens[chunkTokens.length-1];
-  if(last.end) delay += perWord*0.9;
-  else if(last.pause) delay += perWord*0.45;
+  if(last.end) delay += perWord*(sp ? 1.3 : 0.9);
+  else if(last.pause) delay += perWord*(sp ? 0.6 : 0.45);
   const longest = Math.max(...chunkTokens.map(t=>t.w.length));
   if(longest>8) delay += perWord*0.25;
+  // extra breath at a structural (paragraph/page/chapter) boundary
+  if(sp && isUnitEnd(S.index + S.chunk)) delay += perWord*1.1;
 
+  const prev = S.index;
   S.index += S.chunk;
   updateProgress();
   saveProgress();
+
+  // Phase 2: did the chunk we just consumed cross a block? Cheap no-op for prose.
+  if(S.sortedBlocks.length){
+    const hit = firstBlockInRange(S.sortedBlocks, prev, S.index, dismissedSet(), S.shownBlocks);
+    if(hit){
+      const m = modeForKind(hit.kind);
+      if(m === "skip"){
+        collectBlock(hit);                 // route to appendix/index — do NOT halt
+      } else {
+        presentBlock(hit, m);              // pause/hybrid — halt the stream, return
+        return;
+      }
+    }
+  }
   S.timer = setTimeout(()=>{ if(S.playing) step(); }, delay);
 }
 function play(){
@@ -211,6 +246,219 @@ function fwdSentence(){
   jumpTo(Math.min(S.tokens.length-1, i+1));
 }
 
+/* ---------------- Phase 2: non-linear blocks ----------------
+   When the stream crosses a captured block (table/image/figure/quote/code), the
+   reader either halts and shows it (pause/hybrid) or collects it into an appendix
+   + a document index (skip), per the per-document blockMode. */
+function dismissedSet(){ return S.dismissed || (S.dismissed = new Set()); }
+function normalizeBlockMode(v){
+  const bm = Object.assign(defaultBlockMode(), v||{});
+  if(!Array.isArray(bm.dismissed)) bm.dismissed = [];
+  return bm;
+}
+function unitTitle(i){ return (S.units[i] && S.units[i].title) || "Section"; }
+function presentKinds(){ return [...new Set(S.blocks.map(b=>b.kind))]; }
+
+// Render a block's payload into an element. Image → <img>; sanitized html → innerHTML
+// (Phase 1 stripped script/style/on*/javascript:, so it is trusted by construction).
+function renderBlockInto(el, block){
+  el.innerHTML = "";
+  const p = block && block.payload;
+  if(p && p.type==="image"){
+    const img=document.createElement("img");
+    img.src = p.dataUrl || p.blobUrl || ""; img.alt = p.alt || KIND_LABEL[block.kind] || "";
+    el.appendChild(img);
+  } else if(p && p.type==="html" && typeof p.html==="string"){
+    el.innerHTML = p.html;
+  } else {
+    el.innerHTML = `<p class="bc-empty">Couldn’t render this ${esc((block&&block.kind)||"block")}.</p>`;
+  }
+}
+
+// pause/hybrid — halt the stream and raise the still card.
+function presentBlock(block, mode){
+  clearTimeout(S.timer);
+  S.cardOpen = true; S.previewing = false; S.currentBlock = block;
+  $("ribbon").classList.remove("playing");
+  $("bcKind").textContent = KIND_LABEL[block.kind] || "Block";
+  $("bcUnit").textContent = unitTitle(block.unit);
+  renderBlockInto($("bcBody"), block);
+  $("bcViewPage").classList.toggle("hidden", mode!=="hybrid");
+  $("bcDismiss").classList.toggle("hidden", !isAutoDetected(block));
+  $("bcResume").textContent = "Resume reading →";
+  $("blockCard").classList.remove("hidden");
+  Haptics.trigger("light");
+  $("bcResume").focus({preventScroll:true});
+}
+
+// Resume button / Space / stage-tap while a card is up.
+function resumeFromCard(){
+  if(!S.cardOpen) return;
+  const b = S.currentBlock;
+  const wasPreview = S.previewing;
+  if(b && !wasPreview) S.shownBlocks.add(b.id);
+  hideBlockUI();
+  if(wasPreview) return;            // previewing a collected block doesn't move the stream
+  S.rampStart = S.index;
+  if(S.playing) step();
+}
+
+// skip — never interrupt; collect into the appendix + document index.
+function collectBlock(block){
+  if(S.shownBlocks.has(block.id)) return;
+  S.shownBlocks.add(block.id);
+  S.collected.push(block);
+  $("figIndexToggle").classList.remove("hidden");
+  renderFigIndex();
+}
+
+// Suppress an auto-detected false positive for this document (persisted).
+function dismissBlock(block){
+  const id = block.id;
+  S.shownBlocks.add(id);
+  if(!S.blockMode.dismissed.includes(id)) S.blockMode.dismissed.push(id);
+  dismissedSet().add(id);
+  S.collected = S.collected.filter(b=>b.id!==id);
+  renderFigIndex();
+  persistBlockMode();
+  hideBlockUI();
+  toast("Dismissed — won’t show again in this document", { action:"Undo", onAction:()=>{
+    S.blockMode.dismissed = S.blockMode.dismissed.filter(x=>x!==id);
+    dismissedSet().delete(id); S.shownBlocks.delete(id);
+    persistBlockMode();
+  }});
+  S.rampStart = S.index;
+  if(S.playing) step();
+}
+
+// Preview a collected block from the index (does not move the reading position).
+function previewBlock(block){
+  if(S.playing) pause();
+  S.cardOpen = true; S.previewing = true; S.currentBlock = block;
+  $("bcKind").textContent = KIND_LABEL[block.kind] || "Block";
+  $("bcUnit").textContent = unitTitle(block.unit);
+  renderBlockInto($("bcBody"), block);
+  $("bcViewPage").classList.add("hidden");
+  $("bcDismiss").classList.toggle("hidden", !isAutoDetected(block));
+  $("bcResume").textContent = "Close";
+  $("blockCard").classList.remove("hidden");
+  $("bcResume").focus({preventScroll:true});
+}
+
+function openPageView(){
+  const b = S.currentBlock; if(!b) return;
+  $("pvTitle").textContent = unitTitle(b.unit);
+  renderBlockInto($("pvScroll"), b);
+  $("pageView").classList.remove("hidden");
+  $("pvBack").focus({preventScroll:true});
+}
+function closePageView(){ $("pageView").classList.add("hidden"); if(S.cardOpen) $("bcResume").focus({preventScroll:true}); }
+function hideBlockUI(){ $("blockCard").classList.add("hidden"); $("pageView").classList.add("hidden"); $("figIndex").classList.add("hidden"); S.cardOpen=false; S.previewing=false; }
+
+/* document-level Figures & Tables index */
+function renderFigIndex(){
+  const list=$("fiList"); if(!list) return;
+  list.innerHTML="";
+  if(!S.collected.length){ list.innerHTML = `<p class="fi-empty">Nothing collected yet.</p>`; return; }
+  const byUnit=new Map();
+  for(const b of S.collected){ if(!byUnit.has(b.unit)) byUnit.set(b.unit, []); byUnit.get(b.unit).push(b); }
+  for(const [unit, items] of byUnit){
+    const h=document.createElement("div"); h.className="fi-group"; h.textContent=unitTitle(unit); list.appendChild(h);
+    items.forEach((b,i)=>{
+      const row=document.createElement("button"); row.type="button"; row.className="fi-item";
+      row.innerHTML = `<span class="fi-glyph">${esc(KIND_LABEL[b.kind]||"Block")}</span>`+
+                      `<span class="fi-cap">${esc(KIND_LABEL[b.kind]||"Block")} ${i+1}</span>`;
+      row.onclick=()=>{ closeFigIndex(); previewBlock(b); };
+      list.appendChild(row);
+    });
+  }
+}
+function openFigIndex(){ renderFigIndex(); $("figIndex").classList.remove("hidden"); $("fiClose").focus({preventScroll:true}); }
+function closeFigIndex(){ $("figIndex").classList.add("hidden"); }
+
+/* settings: global mode + per-kind overrides */
+function syncBlockModeUI(){
+  const def = (S.blockMode && S.blockMode.default) || "pause";
+  document.querySelectorAll("#blockModeSeg button").forEach(b=>b.classList.toggle("active", b.dataset.bm===def));
+  renderBlockModeGrid();
+}
+function setBlockModeDefault(m){ S.blockMode.default = m; syncBlockModeUI(); persistBlockMode(); }
+function setKindMode(kind, m){ if(m==="default") delete S.blockMode[kind]; else S.blockMode[kind]=m; syncBlockModeUI(); persistBlockMode(); }
+function renderBlockModeGrid(){
+  const grid=$("blockModeGrid"); if(!grid) return;
+  grid.innerHTML="";
+  for(const kind of presentKinds()){
+    const cur = S.blockMode[kind] || "default";
+    const row=document.createElement("div"); row.className="bmg-row";
+    row.innerHTML = `<span class="bmg-kind">${esc(KIND_LABEL[kind]||kind)}</span>`;
+    const seg=document.createElement("div"); seg.className="seg bmg-seg";
+    [["default","Default"],["pause","Pause"],["hybrid","Page"],["skip","Collect"]].forEach(([v,label])=>{
+      const btn=document.createElement("button"); btn.type="button"; btn.textContent=label;
+      btn.className = (cur===v)?"active":""; btn.onclick=()=>setKindMode(kind, v);
+      seg.appendChild(btn);
+    });
+    row.appendChild(seg); grid.appendChild(row);
+  }
+}
+function persistBlockMode(){ if(S.key) Store.putBlockMode(S.key, S.blockMode).catch(()=>{}); }
+
+/* ---------------- Phase 3: retention aids ---------------- */
+// True when token index i begins a new unit (so i-1 is a structural boundary).
+function isUnitEnd(i){ if(S.units.length<2) return false; for(let k=1;k<S.units.length;k++) if(S.units[k].start===i) return true; return false; }
+function currentUnit(i){ let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=i) u=k; } return u; }
+
+/* rewind / regression — pure index moves */
+function back10(){ jumpTo(S.index - 10); }
+function replaySentence(){ const s=sentenceStart(S.tokens, S.index); jumpTo(s); if(!S.playing) play(); }
+
+/* highlights */
+function markCurrent(wordOnly){
+  if(!S.tokens.length) return;
+  const start = wordOnly ? S.index : sentenceStart(S.tokens, S.index);
+  const end   = wordOnly ? S.index : sentenceEnd(S.tokens, S.index);
+  S.highlights = toggleRange(S.highlights, start, end, currentUnit(start), Date.now());
+  persistHighlights(); updateMarkBtn(); Haptics.trigger("success");
+  const on = S.highlights.some(r=>r.start<=S.index && S.index<=r.end);
+  toast(on ? "Highlighted" : "Highlight removed", { duration:1600 });
+}
+function highlightAt(i){ return S.highlights.some(r=> r.start<=i && i<=r.end); }
+function updateMarkBtn(){
+  const b=$("markBtn"); if(!b) return;
+  const on = highlightAt(S.index);
+  b.classList.toggle("on", on);
+  b.setAttribute("aria-pressed", on?"true":"false");
+}
+function persistHighlights(){ if(S.key) Store.putHighlights(S.key, serializeHighlights(S.highlights)).catch(()=>{}); }
+
+/* review panel */
+function renderReview(){
+  const list=$("rvList"); if(!list) return;
+  list.innerHTML="";
+  if(!S.highlights.length){ list.innerHTML = `<p class="rv-empty">No highlights yet — tap Mark while reading.</p>`; return; }
+  const sorted = S.highlights.slice().sort((a,b)=>a.start-b.start);
+  let curUnit=null;
+  for(const r of sorted){
+    const ut = unitTitle(r.unit);
+    if(ut!==curUnit){ const h=document.createElement("div"); h.className="rv-group"; h.textContent=ut; list.appendChild(h); curUnit=ut; }
+    const row=document.createElement("div"); row.className="rv-item";
+    const q=document.createElement("blockquote"); q.className="rv-quote"; q.textContent=rangeText(S.tokens, r); row.appendChild(q);
+    const acts=document.createElement("div"); acts.className="rv-acts";
+    const mk=(label,fn)=>{ const b=document.createElement("button"); b.type="button"; b.className="rv-act"; b.textContent=label; b.onclick=fn; return b; };
+    acts.appendChild(mk("Jump", ()=>{ closeReview(); jumpTo(r.start); }));
+    acts.appendChild(mk("Copy", ()=>{ navigator.clipboard && navigator.clipboard.writeText(rangeText(S.tokens, r)).then(()=>toast("Copied",{duration:1400})).catch(()=>{}); }));
+    acts.appendChild(mk("Remove", ()=>{ S.highlights = toggleRange(S.highlights, r.start, r.end, r.unit, r.ts); persistHighlights(); updateMarkBtn(); renderReview(); }));
+    row.appendChild(acts); list.appendChild(row);
+  }
+}
+function openReview(){ renderReview(); $("review").classList.add("show"); $("rvClose").focus({preventScroll:true}); }
+function closeReview(){ $("review").classList.remove("show"); }
+function exportHighlights(){
+  if(!S.highlights.length){ toast("No highlights to export yet."); return; }
+  const md = exportMarkdown(S.tokens, S.units, S.highlights, S.title);
+  triggerDownload(new Blob([md], {type:"text/markdown"}), `${(S.title||"highlights").replace(/[^\w.-]+/g,"-").slice(0,40)}-highlights.md`);
+  toast(`Exported ${S.highlights.length} highlight${S.highlights.length===1?"":"s"} as Markdown.`);
+}
+
 /* ---------------- progress + scrubber ---------------- */
 function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
 function updateProgress(){
@@ -224,7 +472,29 @@ function updateProgress(){
   if(S.units.length>1){
     let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=S.index) u=k; }
     if($("navSel").selectedIndex!==u) $("navSel").selectedIndex=u;
+    // Phase 2: crossing into a new unit surfaces the just-finished chapter's appendix
+    // (collected figures/tables) as a non-blocking, dismissible affordance.
+    if(u !== S.lastUnit){
+      const finished = S.lastUnit;
+      // collected figures/tables in the just-finished chapter
+      if(S.collected && S.collected.length){
+        const inUnit = S.collected.filter(b=>b.unit===finished);
+        const seen = S.apxShown || (S.apxShown = new Set());
+        if(inUnit.length && !seen.has(finished)){
+          seen.add(finished);
+          toast(`${inUnit.length} ${inUnit.length===1?"figure/table":"figures & tables"} in “${unitTitle(finished)}”`,
+                { action:"View", onAction:openFigIndex });
+        }
+      }
+      // Phase 3: highlights in the just-finished chapter → opt-in review
+      if(S.highlights && S.highlights.length && S.hlUnitShown && !S.hlUnitShown.has(finished)){
+        const n = S.highlights.filter(r=>r.unit===finished).length;
+        if(n){ S.hlUnitShown.add(finished); toast(`Review ${n} highlight${n===1?"":"s"} from “${unitTitle(finished)}”`, { action:"Review", onAction:openReview }); }
+      }
+    }
+    S.lastUnit = u;
   }
+  updateMarkBtn();
 }
 
 /* ---------------- toasts (non-blocking, on-brand feedback) ---------------- */
@@ -288,12 +558,38 @@ function removeItem(item){
 }
 
 /* ---------------- loading a document ---------------- */
-function openReader(tokens, units, title, meta, key){
+function openReader(tokens, units, title, meta, key, blocks){
   S.tokens=tokens; S.units=units&&units.length?units:[{title:"Start",start:0}];
   S.title=title; S.meta=meta; S.key=key; S.index=0;
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   const prior = loadLib().find(x=>x.key===key);
   if(prior && prior.index>0 && prior.index<tokens.length) S.index=prior.index;
+
+  // Phase 2: block sidecar + per-document presentation mode.
+  S.blocks = Array.isArray(blocks) ? blocks : [];
+  S.sortedBlocks = indexBlocks(S.blocks);
+  S.shownBlocks = new Set();
+  S.collected = [];
+  S.cardOpen = false; S.lastUnit = 0;
+  hideBlockUI();
+  S.blockMode = defaultBlockMode();
+  S.dismissed = new Set(S.blockMode.dismissed);
+  $("figIndexToggle").classList.add("hidden");
+  $("blockModeCtrl").classList.toggle("hidden", S.blocks.length===0);
+  if(S.blocks.length){
+    Store.getBlockMode(key).then(v=>{
+      if(v && S.key===key){ S.blockMode = normalizeBlockMode(v); S.dismissed = new Set(S.blockMode.dismissed); }
+      syncBlockModeUI();
+    }).catch(()=>syncBlockModeUI());
+  }
+  syncBlockModeUI();
+  renderFigIndex();
+
+  // Phase 3: per-sentence pacing factors (once) + per-document highlights (async load).
+  S.sentenceFactor = sentenceFactors(tokens);
+  S.highlights = []; S.hlUnitShown = new Set();
+  Store.getHighlights(key).then(rec=>{ if(S.key===key){ S.highlights = deserializeHighlights(rec); updateMarkBtn(); } }).catch(()=>{});
+  updateMarkBtn();
 
   $("docTitle").textContent=title;
   $("docMeta").textContent=meta;
@@ -320,7 +616,14 @@ async function persist(key, rec){
 async function pruneStore(){
   try{
     const keep = new Set(loadLib().map(x=>x.key));
-    for(const k of await Store.keys()){ if(!keep.has(k)) await Store.del(k); }
+    for(const k of await Store.keys()){
+      // retain a cached file for a live library entry, or a blockmode:: pref whose
+      // document is still in the library (tiny, book-scoped).
+      if(keep.has(k)) continue;
+      if(typeof k==="string" && k.startsWith("blockmode::") && keep.has(k.slice("blockmode::".length))) continue;
+      if(typeof k==="string" && k.startsWith("hl::") && keep.has(k.slice("hl::".length))) continue;
+      await Store.del(k);
+    }
   }catch(e){}
 }
 // Reopen a recent item straight from the device.
@@ -336,11 +639,11 @@ async function openFromStore(item){
   showParse("Opening "+item.title+"…","Reading from this device",{kind:rec.kind,name:rec.name||item.title,size:rec.blob?rec.blob.size:0});
   try{
     if(rec.kind==="pdf"){
-      const {tokens,units,pages}=await parsePDF(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key);
+      const {tokens,units,pages,blocks}=await parsePDF(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key,blocks);
     } else {
-      const {tokens,units,chapters}=await parseEPUB(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key);
+      const {tokens,units,chapters,blocks}=await parseEPUB(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key,blocks);
     }
   }catch(err){ hideParse(); toast("Couldn't reopen that file — "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>openFromStore(item)}); }
 }
@@ -387,14 +690,14 @@ async function handleFile(file){
   showParse("Opening "+name+"…", "Extracting text locally", {kind, name:file.name, size:file.size});
   try{
     if(kind==="pdf"){
-      const {tokens,units,pages}=await parsePDF(file, setParse);
+      const {tokens,units,pages,blocks}=await parsePDF(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key);
+      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key,blocks);
       persist(key,{kind:"pdf",blob:file,name:file.name});
     } else {
-      const {tokens,units,chapters}=await parseEPUB(file, setParse);
+      const {tokens,units,chapters,blocks}=await parseEPUB(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key);
+      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key,blocks);
       persist(key,{kind:"epub",blob:file,name:file.name});
     }
   }catch(err){
@@ -481,7 +784,12 @@ async function buildBackup(){
     if(rec.kind==="text") files.push({ key:item.key, kind:"text", name:rec.name||item.title, text:rec.text });
     else if(rec.blob)     files.push({ key:item.key, kind:rec.kind, name:rec.name||item.title, data:await blobToDataURL(rec.blob) });
   }
-  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files };
+  const blockModes = {}, highlights = {};
+  for(const item of lib){
+    try{ const bm = await Store.getBlockMode(item.key); if(bm) blockModes[item.key]=bm; }catch(e){}
+    try{ const hl = await Store.getHighlights(item.key); if(hl) highlights[item.key]=hl; }catch(e){}
+  }
+  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights };
   return { blob:new Blob([JSON.stringify(backup)], { type:"application/json" }), count:files.length };
 }
 
@@ -548,6 +856,9 @@ async function importBackup(file){
       if(!ex || (it.ts||0) > (ex.ts||0)) byKey.set(it.key, it);
     }
     saveLib([...byKey.values()].sort((a,b)=>(b.ts||0)-(a.ts||0)));
+    // Restore per-document block-presentation modes + highlights alongside the books.
+    if(data.blockModes){ for(const [k,v] of Object.entries(data.blockModes)){ try{ await Store.putBlockMode(k, v); }catch(e){} } }
+    if(data.highlights){ for(const [k,v] of Object.entries(data.highlights)){ try{ await Store.putHighlights(k, v); }catch(e){} } }
     await pruneStore();
     // Restore settings if the backup carried them.
     if(data.prefs){
@@ -558,6 +869,7 @@ async function importBackup(file){
         if(data.prefs.mode) setMode(data.prefs.mode);
         if(typeof data.prefs.countdown==="boolean") settings.countdown = data.prefs.countdown;
         if(typeof data.prefs.context==="boolean")   settings.context   = data.prefs.context;
+        if(typeof data.prefs.smartPacing==="boolean") settings.smartPacing = data.prefs.smartPacing;
         applyAids();
       }catch(e){}
     }
@@ -686,10 +998,10 @@ function init(){
 
   // modal keyboard: Escape dismisses, Tab stays trapped inside the open dialog
   document.addEventListener("keydown",e=>{
-    const aboutOpen=about.classList.contains("show"), doneOpen=$("done").classList.contains("show");
-    if(!aboutOpen && !doneOpen) return;
-    if(e.key==="Escape"){ e.preventDefault(); aboutOpen ? closeAbout() : requestHome(); }
-    else if(e.key==="Tab"){ trapTab(aboutOpen ? about : $("done"), e); }
+    const aboutOpen=about.classList.contains("show"), doneOpen=$("done").classList.contains("show"), reviewOpen=$("review").classList.contains("show");
+    if(!aboutOpen && !doneOpen && !reviewOpen) return;
+    if(e.key==="Escape"){ e.preventDefault(); reviewOpen ? closeReview() : (aboutOpen ? closeAbout() : requestHome()); }
+    else if(e.key==="Tab"){ trapTab(reviewOpen ? $("review") : (aboutOpen ? about : $("done")), e); }
   });
 
   $("doneShare").onclick=shareResult;
@@ -702,7 +1014,7 @@ function init(){
   $("homeBtn").onclick=requestHome;
   $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); requestHome(); }});
   // tap the reading area to play/pause (large, mobile-friendly target)
-  $("stage").addEventListener("click",()=>{ toggle(); Haptics.trigger("light"); });
+  $("stage").addEventListener("click",()=>{ if(S.cardOpen){ resumeFromCard(); return; } toggle(); Haptics.trigger("light"); });
 
   // Cmd/Ctrl+Enter begins reading straight from the paste box (lower friction than reaching for the button)
   $("paste").addEventListener("keydown",e=>{ if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); $("pasteGo").click(); }});
@@ -721,6 +1033,37 @@ function init(){
 
   // "Reading settings" disclosure for the secondary controls
   $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
+
+  // Phase 2: block still-card / page view / figures index wiring
+  $("bcResume").onclick=resumeFromCard;
+  $("bcViewPage").onclick=openPageView;
+  $("bcDismiss").onclick=()=>{ if(S.currentBlock) dismissBlock(S.currentBlock); };
+  $("pvBack").onclick=closePageView;
+  $("fiClose").onclick=closeFigIndex;
+  $("figIndexToggle").onclick=openFigIndex;
+  // tap the card chrome (not its body/buttons) to resume
+  $("blockCard").addEventListener("click",e=>{ if(e.target.id==="blockCard" || (e.target.classList&&e.target.classList.contains("bc-head"))) resumeFromCard(); });
+  // block presentation mode: global segment + per-type overrides
+  document.querySelectorAll("#blockModeSeg button").forEach(b=>b.onclick=()=>{ setBlockModeDefault(b.dataset.bm); Haptics.trigger("light"); });
+  $("blockModeAdvanced").onclick=()=>{ $("blockModeGrid").classList.toggle("hidden"); };
+
+  // Phase 3: highlights + rewind wiring
+  const markBtn=$("markBtn");
+  if(markBtn){
+    let lp=null, longFired=false;
+    const startLP=()=>{ longFired=false; lp=setTimeout(()=>{ longFired=true; markCurrent(true); }, 450); };
+    const endLP=()=>{ clearTimeout(lp); };
+    markBtn.addEventListener("pointerdown",startLP);
+    markBtn.addEventListener("pointerup",endLP);
+    markBtn.addEventListener("pointerleave",endLP);
+    markBtn.onclick=()=>{ if(longFired){ longFired=false; return; } markCurrent(false); };  // tap = sentence
+  }
+  $("replayBtn") && ($("replayBtn").onclick=replaySentence);
+  $("back10Btn") && ($("back10Btn").onclick=back10);
+  $("rvClose").onclick=closeReview;
+  $("rvExport").onclick=exportHighlights;
+  $("review").addEventListener("click",e=>{ if(e.target===$("review")) closeReview(); });
+  $("doneReview").onclick=()=>{ $("done").classList.remove("show"); openReview(); };
 
   // reading-aid toggles (countdown / context line)
   document.querySelectorAll("#aidSeg button").forEach(b=>b.onclick=()=>{
@@ -760,17 +1103,28 @@ function init(){
   // keyboard
   document.addEventListener("keydown",e=>{
     if(!$("reader").classList.contains("show")) return;
-    if($("done").classList.contains("show")||$("about").classList.contains("show")) return;  // a modal owns the keyboard
+    if($("done").classList.contains("show")||$("about").classList.contains("show")||$("review").classList.contains("show")) return;  // a modal owns the keyboard
+    // Phase 2: an open block card / page view / figures index owns the keyboard
+    const fiOpen=!$("figIndex").classList.contains("hidden");
+    if(S.cardOpen || fiOpen){
+      const pvOpen=!$("pageView").classList.contains("hidden");
+      if(e.code==="Escape"){ e.preventDefault(); if(fiOpen) closeFigIndex(); else if(pvOpen) closePageView(); else resumeFromCard(); return; }
+      if(e.code==="Tab"){ trapTab(fiOpen?$("figIndex"):(pvOpen?$("pageView"):$("blockCard")), e); return; }
+      if(e.code==="Space" && !fiOpen && !pvOpen){ if(e.target.tagName==="BUTTON") return; e.preventDefault(); resumeFromCard(); return; }
+      return;
+    }
     const tag=e.target.tagName;
     if(tag==="TEXTAREA"||tag==="SELECT"||tag==="INPUT") return;   // don't hijack typing
     if(e.code==="Space"){
       if(tag==="BUTTON"||e.target.getAttribute("role")==="button") return;  // let a focused control activate itself
       e.preventDefault();toggle();
     }
-    else if(e.code==="ArrowLeft"){e.preventDefault();backSentence();}
+    else if(e.code==="ArrowLeft"){e.preventDefault(); e.shiftKey ? back10() : backSentence();}
     else if(e.code==="ArrowRight"){e.preventDefault();fwdSentence();}
     else if(e.code==="ArrowUp"){e.preventDefault();setWpm(Math.min(800,S.wpm+25));}
     else if(e.code==="ArrowDown"){e.preventDefault();setWpm(Math.max(150,S.wpm-25));}
+    else if(e.code==="KeyM"){e.preventDefault(); markCurrent(e.shiftKey);}   // M sentence, Shift+M word
+    else if(e.code==="KeyR"){e.preventDefault(); replaySentence();}
     else if(e.code==="Escape"){requestHome();}
   });
 
@@ -781,13 +1135,14 @@ function init(){
     if(prefs.mode) setMode(prefs.mode);
     if(typeof prefs.countdown==="boolean") settings.countdown=prefs.countdown;
     if(typeof prefs.context==="boolean") settings.context=prefs.context;
+    if(typeof prefs.smartPacing==="boolean") settings.smartPacing=prefs.smartPacing;
     if(typeof prefs.moreOpen==="boolean") settings.moreOpen=prefs.moreOpen;
   }catch(e){}
   setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(settings.moreOpen);
 
   renderLibrary();
   window.addEventListener("beforeunload",()=>{
-    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,moreOpen:settings.moreOpen}));
+    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,moreOpen:settings.moreOpen}));
   });
 }
 
