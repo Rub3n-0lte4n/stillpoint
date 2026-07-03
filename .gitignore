@@ -5,3 +5,6 @@ graphify-out/
 # dev-only test tooling (app itself stays no-build)
 node_modules/
 package-lock.json
+
+# marketing context for agent skills (strategy stays out of the public repo)
+.agents/
