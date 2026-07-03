@@ -595,6 +595,11 @@
   .done-stats b{display:block;font-family:"Fraunces",serif;font-size:26px;color:var(--gold);font-variant-numeric:tabular-nums;}
   .done-stats span{display:block;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink-mute);margin-top:6px;}
   .done-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+  /* Quiet tip ask at the moment of finished value — fine-print register, never shouty. */
+  .done-support{color:var(--ink-mute);font-size:12.5px;margin-top:22px;}
+  .done-support a{color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(230,197,135,0.4);transition:filter var(--t-fast) var(--ease-out);}
+  .done-support a:hover{filter:brightness(1.15);}
+  .done-support .hh{color:var(--rose);}
   @keyframes doneIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
   @keyframes statIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
