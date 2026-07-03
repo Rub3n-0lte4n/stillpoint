@@ -2,7 +2,7 @@
 
 A focal-point speed reader that streams **PDFs, EPUBs, and pasted text** through a single still point — no eye movement, no scanning. Everything runs **entirely in your browser**; files never leave your device.
 
-**[→ Open the live app](https://rub3n-0lte4n.github.io/stillpoint/)**
+**[→ Open the live app](https://stillpointreader.com/)**
 
 ## Features
 

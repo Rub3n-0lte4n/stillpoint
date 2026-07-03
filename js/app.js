@@ -961,7 +961,7 @@ function closeAbout(){ const a=$("about"); if(!a||!a.classList.contains("show"))
 
 // Turn a finished session into a shareable line — a natural completion → acquisition loop.
 async function shareResult(){
-  const url="https://rub3n-0lte4n.github.io/stillpoint/";
+  const url="https://stillpointreader.com/";
   const text=`I just finished “${S.title}” on Stillpoint — ${$("stWords").textContent} words in ${$("stTime").textContent}, at ${$("stWpm").textContent} wpm. A calm, private speed-reader that runs entirely in your browser.`;
   // Fold the link into the text and DON'T pass a separate `url` — when both are given,
   // most share targets keep only the url and drop the stats. One text block keeps both.
