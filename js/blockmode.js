@@ -35,6 +35,23 @@ export function firstBlockInRange(sortedBlocks, lo, hi, dismissed, shown){
   return null;
 }
 
+// Everything the reader must do for the blocks crossed in [lo, hi): collect every
+// skip-mode block up to (but not past) the first pause/hybrid one, which is returned
+// as `present`. The caller marks presented blocks shown and calls again to drain the
+// rest of the window — so a cluster of consecutive blocks is never silently dropped.
+export function blocksToHandle(sortedBlocks, lo, hi, blockMode, dismissed, shown){
+  const collect = [];
+  for(const b of sortedBlocks){
+    if(b.after < lo) continue;
+    if(b.after >= hi) break;
+    if(dismissed && dismissed.has(b.id)) continue;
+    if(shown && shown.has(b.id)) continue;
+    if(modeForKind(blockMode, b.kind) === "skip") collect.push(b);
+    else return { collect, present: b };
+  }
+  return { collect, present: null };
+}
+
 export function isDismissed(blockMode, id){
   return !!(blockMode && Array.isArray(blockMode.dismissed) && blockMode.dismissed.includes(id));
 }

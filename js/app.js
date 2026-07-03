@@ -3,7 +3,7 @@ import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, se
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
-import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, firstBlockInRange, isAutoDetected } from "./blockmode.js";
+import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
 import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exportMarkdown } from "./highlights.js";
 
 /* ---------------- state ---------------- */
@@ -30,6 +30,7 @@ const S = {
   shownBlocks: null,   // Set of block ids already presented/collected this session
   collected: [],       // skip+collect entries (in document order)
   cardOpen: false,     // a still card / page view is currently raised
+  pendingRange: null,  // [lo,hi) token window still holding un-presented blocks
   // --- Phase 3: retention aids ---
   sentenceFactor: null,// Float32Array — per-token smart-pacing slowdown factor
   highlights: [],      // [{start,end,unit,ts}] marked ranges for this document
@@ -148,17 +149,16 @@ function step(){
   updateProgress();
   saveProgress();
 
-  // Phase 2: did the chunk we just consumed cross a block? Cheap no-op for prose.
+  // Phase 2: did the chunk we just consumed cross blocks? Cheap no-op for prose.
+  // A single chunk can cross several blocks (consecutive figures share an `after`),
+  // so drain the whole window: collect every skip block, halt on the first pause one.
   if(S.sortedBlocks.length){
-    const hit = firstBlockInRange(S.sortedBlocks, prev, S.index, dismissedSet(), S.shownBlocks);
-    if(hit){
-      const m = modeForKind(hit.kind);
-      if(m === "skip"){
-        collectBlock(hit);                 // route to appendix/index — do NOT halt
-      } else {
-        presentBlock(hit, m);              // pause/hybrid — halt the stream, return
-        return;
-      }
+    const { collect, present } = blocksToHandle(S.sortedBlocks, prev, S.index, S.blockMode, dismissedSet(), S.shownBlocks);
+    for(const b of collect) collectBlock(b);   // route to appendix/index — do NOT halt
+    if(present){
+      S.pendingRange = [prev, S.index];        // the window may still hold more blocks
+      presentBlock(present, modeForKind(present.kind));  // pause/hybrid — halt, return
+      return;
     }
   }
   S.timer = setTimeout(()=>{ if(S.playing) step(); }, delay);
@@ -204,7 +204,7 @@ function pause(){
   $("playBtn").setAttribute("aria-label","Play");
   saveProgress();
 }
-function toggle(){ S.playing ? pause() : play(); }
+function toggle(){ if(S.cardOpen){ resumeFromCard(); return; } S.playing ? pause() : play(); }
 // Reached the end — show the session summary.
 function finish(){
   pause();
@@ -278,6 +278,9 @@ function renderBlockInto(el, block){
 // pause/hybrid — halt the stream and raise the still card.
 function presentBlock(block, mode){
   clearTimeout(S.timer);
+  // Time spent studying a figure isn't streaming time — pause the reading clock
+  // so the finish-screen average WPM stays honest.
+  if(S.playStart){ S.readMs += Date.now()-S.playStart; S.playStart = null; }
   S.cardOpen = true; S.previewing = false; S.currentBlock = block;
   $("ribbon").classList.remove("playing");
   $("bcKind").textContent = KIND_LABEL[block.kind] || "Block";
@@ -299,8 +302,21 @@ function resumeFromCard(){
   if(b && !wasPreview) S.shownBlocks.add(b.id);
   hideBlockUI();
   if(wasPreview) return;            // previewing a collected block doesn't move the stream
+  continueStream();
+}
+
+// After a card closes: surface whatever else the crossed window still holds
+// (consecutive figures/tables), then pick the stream back up.
+function continueStream(){
+  if(S.pendingRange && S.sortedBlocks.length){
+    const [lo, hi] = S.pendingRange;
+    const { collect, present } = blocksToHandle(S.sortedBlocks, lo, hi, S.blockMode, dismissedSet(), S.shownBlocks);
+    for(const b of collect) collectBlock(b);
+    if(present){ presentBlock(present, modeForKind(present.kind)); return; }
+  }
+  S.pendingRange = null;
   S.rampStart = S.index;
-  if(S.playing) step();
+  if(S.playing){ S.playStart = Date.now(); step(); }
 }
 
 // skip — never interrupt; collect into the appendix + document index.
@@ -327,8 +343,7 @@ function dismissBlock(block){
     dismissedSet().delete(id); S.shownBlocks.delete(id);
     persistBlockMode();
   }});
-  S.rampStart = S.index;
-  if(S.playing) step();
+  continueStream();
 }
 
 // Preview a collected block from the index (does not move the reading position).
@@ -570,7 +585,7 @@ function openReader(tokens, units, title, meta, key, blocks){
   S.sortedBlocks = indexBlocks(S.blocks);
   S.shownBlocks = new Set();
   S.collected = [];
-  S.cardOpen = false; S.lastUnit = 0;
+  S.cardOpen = false; S.lastUnit = 0; S.pendingRange = null;
   hideBlockUI();
   S.blockMode = defaultBlockMode();
   S.dismissed = new Set(S.blockMode.dismissed);
@@ -1056,6 +1071,7 @@ function init(){
     markBtn.addEventListener("pointerdown",startLP);
     markBtn.addEventListener("pointerup",endLP);
     markBtn.addEventListener("pointerleave",endLP);
+    markBtn.addEventListener("pointercancel",endLP);   // scroll/gesture steals the pointer — don't fire a phantom mark
     markBtn.onclick=()=>{ if(longFired){ longFired=false; return; } markCurrent(false); };  // tap = sentence
   }
   $("replayBtn") && ($("replayBtn").onclick=replaySentence);
@@ -1141,9 +1157,12 @@ function init(){
   setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(settings.moreOpen);
 
   renderLibrary();
-  window.addEventListener("beforeunload",()=>{
-    localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,moreOpen:settings.moreOpen}));
-  });
+  // Persist prefs on every "might be leaving" signal — beforeunload alone never
+  // fires on iOS Safari / standalone PWA, which would silently drop settings there.
+  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,moreOpen:settings.moreOpen})); }catch(e){} };
+  window.addEventListener("beforeunload",savePrefs);
+  window.addEventListener("pagehide",savePrefs);
+  document.addEventListener("visibilitychange",()=>{ if(document.hidden) savePrefs(); });
 }
 
 if(document.readyState==="loading") document.addEventListener("DOMContentLoaded", init);
