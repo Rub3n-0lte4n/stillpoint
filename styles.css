@@ -20,6 +20,8 @@
     --rose:#f0a6c8;
     --focus:#ffce5c;          /* ORP focal letter — luminous amber, max contrast on dark */
     --focus-dim:#b9b1c9;       /* surrounding letters, softly dimmed so the focal letter leads */
+    --glow-a:rgba(139,92,246,0.18);  /* ambient page glows — themable */
+    --glow-b:rgba(230,166,200,0.10);
 
     /* ---- spacing · 8pt scale ---- */
     --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:24px; --s-6:32px; --s-7:48px; --s-8:64px;
@@ -55,8 +57,8 @@
     font-family:"Spline Sans",system-ui,sans-serif;
     color:var(--ink);
     background:
-      radial-gradient(1200px 800px at 78% -10%, rgba(139,92,246,0.18), transparent 55%),
-      radial-gradient(1000px 700px at 10% 110%, rgba(230,166,200,0.10), transparent 50%),
+      radial-gradient(1200px 800px at 78% -10%, var(--glow-a), transparent 55%),
+      radial-gradient(1000px 700px at 10% 110%, var(--glow-b), transparent 50%),
       linear-gradient(170deg, var(--bg-1), var(--bg-0) 60%, var(--bg-deep));
     background-attachment:fixed;
     min-height:100vh;
@@ -722,3 +724,76 @@
   .rv-empty{color:var(--ink-mute);text-align:center;padding:30px 0;}
   .rv-foot{margin-top:16px;display:flex;justify-content:flex-end;flex:none;}
   @media (prefers-reduced-motion: reduce){ .review-card{animation:none !important;} }
+
+  /* ================= PATRON ================= */
+  /* Patron themes — token overrides only; the focal amber never changes.
+     Dark hue-shifts by design: every rgba/contrast in the app assumes dark ground. */
+  html[data-theme="ember"]{
+    --bg-deep:#080403; --bg-0:#0d0705; --bg-1:#150b07; --bg-2:#221008;
+    --surface:rgba(44,26,18,0.55); --surface-2:rgba(62,36,22,0.45); --surface-inset:rgba(16,8,5,0.5);
+    --hair:rgba(255,196,150,0.12); --hair-strong:rgba(255,196,150,0.22); --hair-soft:rgba(255,196,150,0.06);
+    --ink-bright:#fffaf6; --ink:#f6ede5; --ink-soft:#d6c5b5; --ink-mute:#ab937d;
+    --amethyst:#ffb894; --amethyst-deep:#e0703c; --rose:#f0a486; --focus-dim:#c9b7a9;
+    --glow-a:rgba(224,112,60,0.16); --glow-b:rgba(230,197,135,0.09);
+    --glow-amethyst:0 22px 60px -24px rgba(224,112,60,0.5);
+  }
+  html[data-theme="garden"]{
+    --bg-deep:#030806; --bg-0:#05100b; --bg-1:#081810; --bg-2:#0c2417;
+    --surface:rgba(18,42,30,0.55); --surface-2:rgba(26,60,42,0.45); --surface-inset:rgba(6,18,12,0.5);
+    --hair:rgba(170,255,210,0.12); --hair-strong:rgba(170,255,210,0.22); --hair-soft:rgba(170,255,210,0.06);
+    --ink-bright:#f8fffb; --ink:#e9f6ee; --ink-soft:#bdd6c7; --ink-mute:#8bab98;
+    --amethyst:#9fe8c0; --amethyst-deep:#3ba873; --rose:#b8e6cc; --focus-dim:#aec4b6;
+    --glow-a:rgba(59,168,115,0.15); --glow-b:rgba(230,197,135,0.08);
+    --glow-amethyst:0 22px 60px -24px rgba(59,168,115,0.5);
+  }
+  html[data-theme="abyss"]{
+    --bg-deep:#03050a; --bg-0:#050810; --bg-1:#081020; --bg-2:#0c1830;
+    --surface:rgba(18,28,52,0.55); --surface-2:rgba(26,40,72,0.45); --surface-inset:rgba(6,10,20,0.5);
+    --hair:rgba(150,200,255,0.12); --hair-strong:rgba(150,200,255,0.22); --hair-soft:rgba(150,200,255,0.06);
+    --ink-bright:#f6faff; --ink:#e9f0f8; --ink-soft:#bdccde; --ink-mute:#8c9cb2;
+    --amethyst:#9cc3ff; --amethyst-deep:#4a7fe0; --rose:#a6c8f0; --focus-dim:#adbacb;
+    --glow-a:rgba(74,127,224,0.16); --glow-b:rgba(166,200,240,0.08);
+    --glow-amethyst:0 22px 60px -24px rgba(74,127,224,0.5);
+  }
+
+  /* patron card in the support section — one quiet step above the tip tiers */
+  .patron-card{
+    display:flex;align-items:center;gap:var(--s-4);
+    margin-top:var(--s-4);padding:var(--s-4) var(--s-5);
+    background:linear-gradient(135deg, rgba(230,197,135,0.08), var(--surface));
+    border:1px solid rgba(230,197,135,0.28);border-radius:var(--r-md);
+    text-decoration:none;color:var(--ink);box-shadow:var(--e-1);
+    transition:transform var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out), border-color var(--t) var(--ease-out);
+  }
+  .patron-card:hover{transform:translateY(-2px);box-shadow:var(--e-2), var(--glow-gold);border-color:rgba(230,197,135,0.5);}
+  .pc-mark{font-size:22px;color:var(--gold);}
+  .pc-body{flex:1;display:flex;flex-direction:column;gap:3px;}
+  .pc-title{font-family:"Fraunces",serif;font-size:var(--fs-md);color:var(--ink-bright);}
+  .pc-desc{font-size:var(--fs-xs);color:var(--ink-soft);line-height:var(--lh-ui);}
+  .pc-amt{text-align:right;font-family:"Fraunces",serif;font-size:var(--fs-lg);color:var(--gold);}
+  .pc-amt em{display:block;font-style:normal;font-family:"Spline Sans",sans-serif;font-size:var(--fs-2xs);letter-spacing:0.6px;color:var(--ink-mute);}
+  @media (max-width:560px){ .patron-card{flex-wrap:wrap;} .pc-amt{width:100%;text-align:left;} }
+
+  /* lifetime badge chip in the header */
+  .patron-chip{
+    display:flex;align-items:center;gap:6px;padding:6px 12px;
+    font-size:var(--fs-2xs);letter-spacing:1px;color:var(--gold);
+    border:1px solid rgba(230,197,135,0.35);border-radius:999px;
+    background:rgba(230,197,135,0.07);
+  }
+
+  /* patron modal internals (reuses the .about modal shell) */
+  #patronTitle .pm-mark{color:var(--gold);}
+  .patron-buy{margin:var(--s-4) 0 var(--s-3);}
+  .patron-code-row{display:flex;gap:var(--s-2);margin-top:var(--s-2);}
+  .patron-code-row input{
+    flex:1;min-width:0;padding:10px 14px;font:inherit;color:var(--ink);
+    background:var(--surface-inset);border:1px solid var(--hair);border-radius:var(--r-sm);
+  }
+  .patron-code-row input:focus-visible{outline:2px solid var(--amethyst-deep);outline-offset:1px;}
+  .patron-hint{margin-top:var(--s-2);font-size:var(--fs-2xs);color:var(--ink-mute);}
+  .patron-hint.ok{color:var(--gold);}
+  .patron-hint.err{color:var(--rose);}
+
+  /* theme segment: patron-only options carry a small gold mark until unlocked */
+  #themeSeg button .lock{color:var(--gold);margin-left:4px;font-size:10px;}

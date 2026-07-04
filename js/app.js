@@ -5,6 +5,7 @@ import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
 import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
 import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exportMarkdown } from "./highlights.js";
+import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js";
 
 /* ---------------- state ---------------- */
 const S = {
@@ -932,6 +933,63 @@ function setSettingsOpen(open){
   settings.moreOpen = open;
 }
 
+/* ---------------- patron + reading themes ----------------
+   Patronage is an honor system: the Stripe receipt carries an unlock code
+   (verified against a hash — see js/patron.js). Patron themes are cosmetic
+   token-swaps; the reader itself stays identical and free. */
+const PATRON_KEY = "fp_patron_v1";
+function isPatron(){ try{ return !!JSON.parse(localStorage.getItem(PATRON_KEY)||"null"); }catch(e){ return false; } }
+function setPatron(){
+  try{ localStorage.setItem(PATRON_KEY, JSON.stringify({ since:Date.now() })); }catch(e){}
+  $("patronChip").classList.remove("hidden");
+  buildThemeSeg();
+}
+let theme = "midnight";
+function applyTheme(id){
+  theme = themeById(id).id;
+  if(theme==="midnight") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  buildThemeSeg();
+}
+function requestTheme(id){
+  if(isPatronTheme(id) && !isPatron()){ openPatron(); return; }   // locked → pitch, don't switch
+  applyTheme(id); Haptics.trigger("light");
+}
+function buildThemeSeg(){
+  const seg=$("themeSeg"); if(!seg) return;
+  seg.innerHTML="";
+  const patron=isPatron();
+  for(const t of THEMES){
+    const b=document.createElement("button"); b.type="button"; b.textContent=t.name;
+    if(isPatronTheme(t.id) && !patron){
+      const l=document.createElement("span"); l.className="lock"; l.textContent="✦";
+      b.appendChild(l); b.title="Patron theme — tap to learn more";
+    }
+    b.classList.toggle("active", theme===t.id);
+    b.onclick=()=>requestTheme(t.id);
+    seg.appendChild(b);
+  }
+}
+let patronReturn=null;
+function openPatron(){ patronReturn=document.activeElement; $("patron").classList.add("show"); $("patronCode").focus({preventScroll:true}); }
+function closePatron(){ $("patron").classList.remove("show"); if(patronReturn && patronReturn.focus) patronReturn.focus({preventScroll:true}); }
+async function tryUnlock(){
+  const input=$("patronCode"), hint=$("patronHint");
+  if(!input.value.trim()){ input.focus(); return; }
+  const ok = await verifyPatronCode(input.value).catch(()=>false);
+  if(ok){
+    setPatron();
+    hint.textContent="Welcome, patron. The themes are yours — thank you for keeping Stillpoint free.";
+    hint.className="patron-hint ok";
+    Haptics.trigger("success");
+    toast("✦ Welcome, patron ♥", { duration:6000 });
+    setTimeout(closePatron, 1400);
+  } else {
+    hint.textContent="That code doesn't match — it's on the Stripe confirmation page from your receipt.";
+    hint.className="patron-hint err";
+  }
+}
+
 /* ---------------- hero demo / how-it-works / share ----------------
    An auto-playing focal stream in the hero so the product demonstrates itself
    above the fold — the strongest conversion lever. Pauses when off-screen or the
@@ -1013,11 +1071,19 @@ function init(){
 
   // modal keyboard: Escape dismisses, Tab stays trapped inside the open dialog
   document.addEventListener("keydown",e=>{
-    const aboutOpen=about.classList.contains("show"), doneOpen=$("done").classList.contains("show"), reviewOpen=$("review").classList.contains("show");
-    if(!aboutOpen && !doneOpen && !reviewOpen) return;
-    if(e.key==="Escape"){ e.preventDefault(); reviewOpen ? closeReview() : (aboutOpen ? closeAbout() : requestHome()); }
-    else if(e.key==="Tab"){ trapTab(reviewOpen ? $("review") : (aboutOpen ? about : $("done")), e); }
+    const aboutOpen=about.classList.contains("show"), doneOpen=$("done").classList.contains("show"), reviewOpen=$("review").classList.contains("show"), patronOpen=$("patron").classList.contains("show");
+    if(!aboutOpen && !doneOpen && !reviewOpen && !patronOpen) return;
+    if(e.key==="Escape"){ e.preventDefault(); patronOpen ? closePatron() : reviewOpen ? closeReview() : (aboutOpen ? closeAbout() : requestHome()); }
+    else if(e.key==="Tab"){ trapTab(patronOpen ? $("patron") : reviewOpen ? $("review") : (aboutOpen ? about : $("done")), e); }
   });
+
+  // patron: modal, unlock code, badge, themes
+  $("patronCodeLink").onclick=openPatron;
+  $("patronClose").onclick=closePatron;
+  $("patron").addEventListener("click",e=>{ if(e.target===$("patron")) closePatron(); });
+  $("patronUnlock").onclick=tryUnlock;
+  $("patronCode").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); tryUnlock(); }});
+  if(isPatron()) $("patronChip").classList.remove("hidden");
 
   $("doneShare").onclick=shareResult;
   heroDemo();
@@ -1153,13 +1219,16 @@ function init(){
     if(typeof prefs.context==="boolean") settings.context=prefs.context;
     if(typeof prefs.smartPacing==="boolean") settings.smartPacing=prefs.smartPacing;
     if(typeof prefs.moreOpen==="boolean") settings.moreOpen=prefs.moreOpen;
+    // patron themes survive restarts, but never boot a locked theme into the pitch modal
+    if(prefs.theme) applyTheme((isPatron() || !isPatronTheme(prefs.theme)) ? prefs.theme : "midnight");
   }catch(e){}
   setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(settings.moreOpen);
+  buildThemeSeg();
 
   renderLibrary();
   // Persist prefs on every "might be leaving" signal — beforeunload alone never
   // fires on iOS Safari / standalone PWA, which would silently drop settings there.
-  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,moreOpen:settings.moreOpen})); }catch(e){} };
+  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,moreOpen:settings.moreOpen,theme})); }catch(e){} };
   window.addEventListener("beforeunload",savePrefs);
   window.addEventListener("pagehide",savePrefs);
   document.addEventListener("visibilitychange",()=>{ if(document.hidden) savePrefs(); });

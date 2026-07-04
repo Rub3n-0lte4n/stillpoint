@@ -94,6 +94,7 @@
         </div>
       </div>
       <div class="header-right">
+        <div class="patron-chip hidden" id="patronChip" title="Lifetime patron">✦ Patron</div>
         <a class="support-pill" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">
           <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.2C.4 8.6 2 5 5.5 5c2 0 3.4 1.1 4.5 2.6C11 6.1 12.5 5 14.5 5 18 5 19.6 8.6 22 11.8 19.5 16.4 12 21 12 21z"/></svg>
           Support
@@ -171,7 +172,15 @@
         </a>
         <a class="tier custom" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Choose your own →</a>
       </div>
-      <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you.</p>
+      <a class="patron-card" href="https://buy.stripe.com/eVq8wPaCMgcD1WVeSu7N604" target="_blank" rel="noopener noreferrer">
+        <span class="pc-mark">✦</span>
+        <span class="pc-body">
+          <span class="pc-title">Become a Patron</span>
+          <span class="pc-desc">A lifetime badge, reading themes made only for patrons — and Stillpoint staying free for everyone.</span>
+        </span>
+        <span class="pc-amt">$29<em>once, forever</em></span>
+      </a>
+      <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you. · <button type="button" class="linklike" id="patronCodeLink">I have a patron code</button></p>
     </section>
 
     <footer class="site">
@@ -324,6 +333,11 @@
           </div>
 
           <div class="ctrl">
+            <label>Theme</label>
+            <div class="seg" id="themeSeg"></div>
+          </div>
+
+          <div class="ctrl">
             <label>Navigate</label>
             <select class="nav-sel" id="navSel"></select>
           </div>
@@ -398,6 +412,23 @@
     <div class="about-actions">
       <button type="button" class="btn gold" id="aboutTry">Try a sample passage →</button>
     </div>
+  </div>
+</div>
+
+<!-- ============ PATRON ============ -->
+<div class="about" id="patron">
+  <div class="about-card" role="dialog" aria-modal="true" aria-labelledby="patronTitle">
+    <button type="button" class="about-x" id="patronClose" aria-label="Close">✕</button>
+    <h3 id="patronTitle"><span class="pm-mark">✦</span> Patron</h3>
+    <p class="about-lead">Patrons are why Stillpoint stays free, private and ad-free for everyone. In return: a lifetime badge, and reading themes made only for patrons — Ember Atelier, Night Garden, Abyss.</p>
+    <div class="patron-buy">
+      <a class="btn gold" href="https://buy.stripe.com/eVq8wPaCMgcD1WVeSu7N604" target="_blank" rel="noopener noreferrer">Become a patron — $29, once</a>
+    </div>
+    <div class="patron-code-row">
+      <input id="patronCode" type="text" placeholder="Unlock code from your receipt" autocomplete="off" spellcheck="false" aria-label="Patron unlock code" />
+      <button type="button" class="btn ghost" id="patronUnlock">Unlock</button>
+    </div>
+    <p class="patron-hint" id="patronHint">Your code appears on the confirmation page after supporting.</p>
   </div>
 </div>
 

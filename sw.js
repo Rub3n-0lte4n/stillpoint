@@ -3,7 +3,7 @@
    runtime. Books are stored locally in IndexedDB (see js/store.js), so once you've
    opened the app online, both it and your library work with no connection.
    Bump CACHE_VERSION whenever shell files change so clients pick up the update. */
-const CACHE_VERSION = "stillpoint-v22";
+const CACHE_VERSION = "stillpoint-v23";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
 // All paths are relative to this file (served at /stillpoint/sw.js).
@@ -19,6 +19,7 @@ const SHELL = [
   "js/store.js",
   "js/blockmode.js",
   "js/highlights.js",
+  "js/patron.js",
   "js/vendor/pdf.min.js",
   "js/vendor/pdf.worker.min.js",
   "js/vendor/jszip.min.js",
