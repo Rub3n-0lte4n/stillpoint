@@ -85,6 +85,7 @@
   /* while the reader is up the document itself doesn't scroll, so kill the
      pull-to-refresh gesture at the root too (it would silently drop your place) */
   html:has(.reader.show), body:has(.reader.show){overscroll-behavior-y:none;}
+  .touch-only{display:none;}   /* copy variants for touch devices, swapped under (hover:none) below */
   /* touch devices: drop the sticky hover-lift, give a press response instead */
   @media (hover:none){
     .dropzone:hover,.tier:hover,.recent-item:hover,.support-pill:hover,.tbtn:hover{transform:none;}
@@ -96,6 +97,8 @@
     input[type=range]::-webkit-slider-thumb{width:24px;height:24px;}
     input[type=range]::-moz-range-thumb{width:24px;height:24px;}
     .kb-only{display:none;}   /* keyboard hints mean nothing on touch */
+    .pointer-only{display:none;}
+    .touch-only{display:inline;}
   }
   /* fine grain overlay for atmosphere */
   body::after{
@@ -201,7 +204,7 @@
   .hd-word .pre{text-align:right;color:var(--focus-dim);white-space:pre;}
   .hd-word .piv{text-align:center;color:var(--focus);font-weight:700;text-shadow:0 0 18px rgba(255,206,92,0.6),0 0 2px rgba(255,206,92,0.9);}
   .hd-word .post{text-align:left;color:var(--focus-dim);white-space:pre;}
-  .hero .hero-cap{max-width:52ch;margin:14px auto 0;color:var(--ink-mute);font-size:13px;line-height:1.55;}
+  .hero .hero-try{margin-top:20px;}
   .hero .hero-fine{max-width:50ch;margin:14px auto 0;color:var(--ink-mute);font-size:12.5px;line-height:1.6;}
   .hero .hero-fine b{color:var(--gold);font-weight:500;}
   .linklike{background:none;border:none;color:var(--gold);font:inherit;cursor:pointer;padding:0;border-bottom:1px solid rgba(230,197,135,0.4);}

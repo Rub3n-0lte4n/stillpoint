@@ -209,6 +209,9 @@ function toggle(){ if(S.cardOpen){ resumeFromCard(); return; } S.playing ? pause
 // Reached the end — show the session summary.
 function finish(){
   pause();
+  // Belief 5: value has now been given — the header Support pill may appear from here on.
+  try{ localStorage.setItem("fp_finished_v1","1"); }catch(e){}
+  $("supportPill").classList.remove("hidden");
   const words = S.tokens.length;
   const mins = S.readMs/60000;
   const avg = mins>0.05 ? Math.round(words/mins) : S.wpm;
@@ -545,6 +548,8 @@ function saveProgress(){
 function renderLibrary(){
   const lib = loadLib();
   const box=$("recent"), list=$("recentList");
+  // the backup panel only makes sense once there's a library to move
+  $("backup").classList.toggle("hidden", lib.length===0);
   if(lib.length===0){ box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   list.innerHTML="";
@@ -1063,10 +1068,18 @@ function init(){
     openReader(toks,[{title:"Pasted text",start:0}],"Pasted text",`TEXT · ${toks.length.toLocaleString()} words`,key);
     persist(key,{kind:"text",text:txt});
   };
-  const loadSample=()=>{ $("paste").value=DEMO; closeAbout(); $("paste").scrollIntoView({behavior:"smooth"}); $("paste").focus(); };
+  // "Try it" starts reading immediately — the sample is the first-run experience,
+  // not a textarea to be filled and then submitted.
+  const startDemo=()=>{
+    closeAbout();
+    const toks=tokenize(DEMO);
+    const key="paste::"+DEMO.length;
+    openReader(toks,[{title:"Sample passage",start:0}],"Sample passage",`TEXT · ${toks.length.toLocaleString()} words`,key);
+    persist(key,{kind:"text",text:DEMO});
+  };
   $("demoBtn").onclick=()=>{ $("paste").value=DEMO; $("paste").focus(); };
-  $("heroTry").onclick=loadSample;
-  $("aboutTry").onclick=loadSample;
+  $("heroTry").onclick=startDemo;
+  $("aboutTry").onclick=startDemo;
 
   // "How it works" — opens the explainer modal (was a dead # link)
   const about=$("about");
@@ -1090,6 +1103,9 @@ function init(){
   $("patronUnlock").onclick=tryUnlock;
   $("patronCode").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); tryUnlock(); }});
   if(isPatron()) $("patronChip").classList.remove("hidden");
+  // the header Support pill earns its place: shown only after a finished book (or to patrons)
+  let finished=false; try{ finished = !!localStorage.getItem("fp_finished_v1"); }catch(e){}
+  if(finished || isPatron()) $("supportPill").classList.remove("hidden");
 
   $("doneShare").onclick=shareResult;
   heroDemo();

@@ -95,7 +95,8 @@
       </div>
       <div class="header-right">
         <div class="patron-chip hidden" id="patronChip" title="Lifetime patron">✦ Patron</div>
-        <a class="support-pill" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">
+        <!-- Belief 5: the ask appears only after value is given — revealed once a book is finished -->
+        <a class="support-pill hidden" id="supportPill" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">
           <svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-10-9.2C.4 8.6 2 5 5.5 5c2 0 3.4 1.1 4.5 2.6C11 6.1 12.5 5 14.5 5 18 5 19.6 8.6 22 11.8 19.5 16.4 12 21 12 21z"/></svg>
           Support
         </a>
@@ -104,26 +105,26 @@
     </header>
 
     <section class="hero">
-      <h2>Read at the speed of <em>thought.</em></h2>
-      <p>Every word arrives at a single, still point — so your eyes stop scanning and your attention stops wandering. Just focus, and flow.</p>
+      <h2>Finish books <em>again.</em></h2>
+      <p>When you read, your eyes don't glide along the line. They jump ahead and dart back to re-read. Stillpoint removes the chase: every word arrives at one still point, and you read at the speed of thought.</p>
 
       <div class="hero-demo" id="heroDemo" role="img" aria-label="Preview: words streaming one at a time through a single fixed focal point">
         <span class="hd-guide top"></span>
         <div class="hd-word" id="hdWord"><span class="pre"></span><span class="piv"></span><span class="post"></span></div>
         <span class="hd-guide bot"></span>
       </div>
-      <p class="hero-cap">A live preview — the whole idea in three seconds. <button type="button" class="linklike" id="heroTry">Try it on a sample passage →</button></p>
+      <button type="button" class="btn gold hero-try" id="heroTry">Try it on a sample passage →</button>
 
-      <p class="hero-fine">Most readers settle around <b>400–600 words a minute</b> — but you set the pace. Made for finishing books, not skimming them.</p>
+      <p class="hero-fine">Most readers settle around <b>400–600 words a minute</b>. You set the pace.</p>
     </section>
 
     <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Open a PDF or EPUB file">
       <div class="dz-icon">
         <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4l4 4"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
       </div>
-      <h3 class="dz-rest">Drop a book or document here</h3>
+      <h3 class="dz-rest"><span class="pointer-only">Drop a book or document here</span><span class="touch-only">Tap to open a book</span></h3>
       <h3 class="dz-drop">Release to open</h3>
-      <div class="formats">or click to browse · <b>PDF</b> &nbsp;·&nbsp; <b>EPUB</b></div>
+      <div class="formats"><span class="pointer-only">or click to browse · </span><b>PDF</b> &nbsp;·&nbsp; <b>EPUB</b></div>
       <input type="file" id="fileInput" accept=".pdf,.epub,application/pdf,application/epub+zip" class="hidden" />
     </div>
 
@@ -141,7 +142,7 @@
       <div class="recent-list" id="recentList"></div>
     </div>
 
-    <div class="backup" id="backup">
+    <div class="backup hidden" id="backup">
       <div class="backup-head">Move to another device</div>
       <p class="backup-copy">Your whole library — the books themselves, your reading positions and settings — packs into one file. Share it straight to another device (AirDrop, Messages…) or export it, then tap Import there. No account, no server: your data stays in your hands.</p>
       <div class="backup-actions">
