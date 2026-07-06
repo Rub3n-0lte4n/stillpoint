@@ -342,7 +342,7 @@ function dismissBlock(block){
   renderFigIndex();
   persistBlockMode();
   hideBlockUI();
-  toast("Dismissed — won’t show again in this document", { action:"Undo", onAction:()=>{
+  toast("Dismissed. It won’t show again in this document", { action:"Undo", onAction:()=>{
     S.blockMode.dismissed = S.blockMode.dismissed.filter(x=>x!==id);
     dismissedSet().delete(id); S.shownBlocks.delete(id);
     persistBlockMode();
@@ -453,7 +453,7 @@ function persistHighlights(){ if(S.key) Store.putHighlights(S.key, serializeHigh
 function renderReview(){
   const list=$("rvList"); if(!list) return;
   list.innerHTML="";
-  if(!S.highlights.length){ list.innerHTML = `<p class="rv-empty">No highlights yet — tap Mark while reading.</p>`; return; }
+  if(!S.highlights.length){ list.innerHTML = `<p class="rv-empty">No highlights yet. Tap Mark while reading.</p>`; return; }
   const sorted = S.highlights.slice().sort((a,b)=>a.start-b.start);
   let curUnit=null;
   for(const r of sorted){
@@ -651,7 +651,7 @@ async function pruneStore(){
 async function openFromStore(item){
   let rec;
   try{ rec = await Store.get(item.key); }catch(e){}
-  if(!rec){ toast(`“${item.title}” isn't on this device anymore — open it once to remember it.`); return; }
+  if(!rec){ toast(`“${item.title}” isn't on this device anymore. Open it once to remember it.`); return; }
   if(rec.kind==="text"){
     const toks=tokenize(rec.text);
     openReader(toks,[{title:"Pasted text",start:0}],item.title,`TEXT · ${toks.length.toLocaleString()} words`,item.key);
@@ -666,7 +666,7 @@ async function openFromStore(item){
       const {tokens,units,chapters,blocks}=await parseEPUB(rec.blob, setParse);
       hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key,blocks);
     }
-  }catch(err){ hideParse(); toast("Couldn't reopen that file — "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>openFromStore(item)}); }
+  }catch(err){ hideParse(); toast("Couldn't reopen that file: "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>openFromStore(item)}); }
 }
 // DOM transition back to the library. Moves focus to a sensible landing control
 // so keyboard / screen-reader users aren't stranded on the now-hidden reader.
@@ -724,7 +724,7 @@ async function handleFile(file){
   }catch(err){
     console.error(err); hideParse();
     // inline retry — the file is still in hand, so one tap resumes without re-picking it
-    toast("Couldn't read that file — "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>handleFile(file)});
+    toast("Couldn't read that file: "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>handleFile(file)});
   }
 }
 let parseStart=0;
@@ -796,7 +796,7 @@ function triggerDownload(blob, filename){
 // or null if there's nothing to back up.
 async function buildBackup(){
   const lib = loadLib();
-  if(lib.length===0){ toast("Nothing to back up yet — open a book first."); return null; }
+  if(lib.length===0){ toast("Nothing to back up yet. Open a book first."); return null; }
   let prefs=null; try{ prefs = JSON.parse(localStorage.getItem(PREFS_KEY)||"null"); }catch(e){}
   const files=[];
   for(const item of lib){
@@ -818,7 +818,7 @@ async function buildBackup(){
 async function exportLibrary(){
   showParse("Packaging your library…","Bundling books, positions and settings");
   let res; try{ res = await buildBackup(); }
-  catch(err){ hideParse(); toast("Couldn't export — "+(err&&err.message?err.message:err), {error:true}); return; }
+  catch(err){ hideParse(); toast("Couldn't export: "+(err&&err.message?err.message:err), {error:true}); return; }
   if(!res){ hideParse(); return; }
   triggerDownload(res.blob, backupFilename());
   hideParse();
@@ -835,16 +835,16 @@ async function shareBackup(){
   if(!navigator.share){ return exportLibrary(); }   // no Web Share at all → just download
   showParse("Preparing your library…","Bundling books, positions and settings");
   let res; try{ res = await buildBackup(); }
-  catch(err){ hideParse(); toast("Couldn't prepare the backup — "+(err&&err.message?err.message:err), {error:true}); return; }
+  catch(err){ hideParse(); toast("Couldn't prepare the backup: "+(err&&err.message?err.message:err), {error:true}); return; }
   if(!res){ hideParse(); return; }
   hideParse();
   const file = new File([res.blob], backupFilename(), { type:"application/json" });
   // Reuse the backup we just built for the download fallback — no rebuild, one clear message.
-  const saveInstead = ()=>{ triggerDownload(res.blob, backupFilename()); toast(`Saved your library as a file instead — import it on another device to sync.`); };
+  const saveInstead = ()=>{ triggerDownload(res.blob, backupFilename()); toast(`Saved your library as a file instead. Import it on another device to sync.`); };
   if(navigator.canShare && !navigator.canShare({ files:[file] })){ return saveInstead(); }  // files unsupported here
   try{
     await navigator.share({ files:[file], title:"Stillpoint library",
-      text:"My Stillpoint library — open Stillpoint on the other device and tap “Import backup”." });
+      text:"My Stillpoint library. Open Stillpoint on the other device and tap “Import backup”." });
   }catch(err){
     if(err && err.name==="AbortError") return;   // user dismissed the sheet — not an error, stay quiet
     saveInstead();                               // share genuinely failed (common on desktop) → download once
@@ -896,7 +896,7 @@ async function importBackup(file){
     }
     hideParse(); renderLibrary();
     toast(`Imported ${restored} book${restored===1?"":"s"} into your library.`);
-  }catch(err){ hideParse(); toast("Couldn't import that backup — "+(err&&err.message?err.message:err), {error:true}); }
+  }catch(err){ hideParse(); toast("Couldn't import that backup: "+(err&&err.message?err.message:err), {error:true}); }
 }
 
 /* ---------------- controls ---------------- */
@@ -974,7 +974,7 @@ function buildThemeSeg(){
     const b=document.createElement("button"); b.type="button"; b.textContent=t.name;
     if(isPatronTheme(t.id) && !patron){
       const l=document.createElement("span"); l.className="lock"; l.textContent="✦";
-      b.appendChild(l); b.title="Patron theme — tap to learn more";
+      b.appendChild(l); b.title="Patron theme. Tap to learn more";
     }
     b.classList.toggle("active", theme===t.id);
     b.onclick=()=>requestTheme(t.id);
@@ -990,13 +990,13 @@ async function tryUnlock(){
   const ok = await verifyPatronCode(input.value).catch(()=>false);
   if(ok){
     setPatron();
-    hint.textContent="Welcome, patron. The themes are yours — thank you for keeping Stillpoint free.";
+    hint.textContent="Welcome, patron. The themes are yours. Thank you for keeping Stillpoint free.";
     hint.className="patron-hint ok";
     Haptics.trigger("success");
     toast("✦ Welcome, patron ♥", { duration:6000 });
     setTimeout(closePatron, 1400);
   } else {
-    hint.textContent="That code doesn't match — it's on the Stripe confirmation page from your receipt.";
+    hint.textContent="That code doesn't match. It's on the Stripe confirmation page from your receipt.";
     hint.className="patron-hint err";
   }
 }
@@ -1031,17 +1031,17 @@ function closeAbout(){ const a=$("about"); if(!a||!a.classList.contains("show"))
 // Turn a finished session into a shareable line — a natural completion → acquisition loop.
 async function shareResult(){
   const url="https://stillpointreader.com/";
-  const text=`I just finished “${S.title}” on Stillpoint — ${$("stWords").textContent} words in ${$("stTime").textContent}, at ${$("stWpm").textContent} wpm. A calm, private speed-reader that runs entirely in your browser.`;
+  const text=`I just finished “${S.title}” on Stillpoint: ${$("stWords").textContent} words in ${$("stTime").textContent}, at ${$("stWpm").textContent} wpm. A calm, private speed-reader that runs entirely in your browser.`;
   // Fold the link into the text and DON'T pass a separate `url` — when both are given,
   // most share targets keep only the url and drop the stats. One text block keeps both.
   const message=`${text} ${url}`;
   if(navigator.share){
     try{ await navigator.share({ title:"Stillpoint", text:message }); }
-    catch(err){ if(!(err && err.name==="AbortError")){ try{ await navigator.clipboard.writeText(message); toast("Result copied — paste it anywhere to share."); }catch(e){} } }
+    catch(err){ if(!(err && err.name==="AbortError")){ try{ await navigator.clipboard.writeText(message); toast("Result copied. Paste it anywhere to share."); }catch(e){} } }
     return;
   }
-  try{ await navigator.clipboard.writeText(message); toast("Result copied — paste it anywhere to share."); }
-  catch(e){ toast("Couldn't copy automatically — long-press to copy your result."); }
+  try{ await navigator.clipboard.writeText(message); toast("Result copied. Paste it anywhere to share."); }
+  catch(e){ toast("Couldn't copy automatically. Long-press to copy your result."); }
 }
 
 /* ---------------- wiring ---------------- */
