@@ -53,14 +53,11 @@
 
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;color-scheme:dark;}
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}  /* no text inflation on iOS landscape */
   body{
     font-family:"Spline Sans",system-ui,sans-serif;
     color:var(--ink);
-    background:
-      radial-gradient(1200px 800px at 78% -10%, var(--glow-a), transparent 55%),
-      radial-gradient(1000px 700px at 10% 110%, var(--glow-b), transparent 50%),
-      linear-gradient(170deg, var(--bg-1), var(--bg-0) 60%, var(--bg-deep));
-    background-attachment:fixed;
+    background:var(--bg-deep);
     min-height:100vh;
     min-height:100dvh;                 /* survive mobile browser-chrome resize */
     overflow-x:hidden;
@@ -69,6 +66,15 @@
     text-rendering:optimizeLegibility;
     -webkit-tap-highlight-color:transparent;  /* no grey flash on tap — we have our own press states */
   }
+  /* page glow on a viewport-pinned layer — background-attachment:fixed is ignored or
+     repainted badly by mobile Safari/Chrome, so the gradients live here instead */
+  body::before{
+    content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background:
+      radial-gradient(1200px 800px at 78% -10%, var(--glow-a), transparent 55%),
+      radial-gradient(1000px 700px at 10% 110%, var(--glow-b), transparent 50%),
+      linear-gradient(170deg, var(--bg-1), var(--bg-0) 60%, var(--bg-deep));
+  }
   /* couture text selection */
   ::selection{background:rgba(197,163,255,0.28);color:var(--ink-bright);}
   /* mobile interaction hygiene */
@@ -76,6 +82,9 @@
   .track{touch-action:none;}  /* horizontal scrub without the page scrolling under the finger */
   .stage,.dock,.reader-top{-webkit-user-select:none;user-select:none;}  /* no accidental text-select while tapping the player */
   .reader{overscroll-behavior:none;}  /* app-like: no pull-to-refresh while reading */
+  /* while the reader is up the document itself doesn't scroll, so kill the
+     pull-to-refresh gesture at the root too (it would silently drop your place) */
+  html:has(.reader.show), body:has(.reader.show){overscroll-behavior-y:none;}
   /* touch devices: drop the sticky hover-lift, give a press response instead */
   @media (hover:none){
     .dropzone:hover,.tier:hover,.recent-item:hover,.support-pill:hover,.tbtn:hover{transform:none;}
@@ -83,6 +92,10 @@
     .tier:active{transform:scale(.96);}
     .btn:active{transform:scale(.96);}
     .recent-item:active{background:var(--surface-2);}
+    /* a finger needs a bigger thumb than a cursor does */
+    input[type=range]::-webkit-slider-thumb{width:24px;height:24px;}
+    input[type=range]::-moz-range-thumb{width:24px;height:24px;}
+    .kb-only{display:none;}   /* keyboard hints mean nothing on touch */
   }
   /* fine grain overlay for atmosphere */
   body::after{
@@ -91,7 +104,12 @@
     mix-blend-mode:overlay;
   }
 
-  .wrap{max-width:1080px;margin:0 auto;padding:0 24px;}
+  .wrap{
+    max-width:1080px;margin:0 auto;padding:0 24px;
+    /* viewport-fit=cover: keep content clear of the notch/camera in landscape */
+    padding-left:max(24px, env(safe-area-inset-left));
+    padding-right:max(24px, env(safe-area-inset-right));
+  }
 
   /* ---------- Header ---------- */
   header.site{
@@ -392,6 +410,8 @@
   .scrub .time{font-size:12px;color:var(--ink-mute);font-variant-numeric:tabular-nums;flex:none;width:74px;}
   .scrub .time.r{text-align:right;}
   .track{flex:1;height:7px;border-radius:7px;background:rgba(255,255,255,0.07);position:relative;cursor:pointer;}
+  /* invisible grab zone — the visual track stays a hairline, the touch target doesn't */
+  .track::before{content:"";position:absolute;left:0;right:0;top:-16px;bottom:-16px;}
   .track .fill{position:absolute;inset:0 auto 0 0;width:0;border-radius:7px;background:linear-gradient(90deg,var(--amethyst-deep),var(--amethyst));}
   .track .knob{position:absolute;top:50%;left:0;transform:translate(-50%,-50%);width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(197,163,255,0.3),0 2px 8px rgba(0,0,0,.5);}
 
@@ -452,7 +472,11 @@
   .hidden{display:none !important;}
 
   @media (max-width:680px){
-    .wrap{padding:0 16px;}
+    .wrap{
+      padding:0 16px;
+      padding-left:max(16px, env(safe-area-inset-left));
+      padding-right:max(16px, env(safe-area-inset-right));
+    }
     header.site{padding:max(20px, calc(env(safe-area-inset-top) + 10px)) 0 6px;}
     .privacy-pill{display:none;}
     .brand h1{font-size:21px;}
@@ -470,10 +494,12 @@
     .support-pill{padding:11px 16px;}
     footer.site a{display:inline-block;padding:7px 2px;}
     .recent-item .ri-x{padding:11px;margin:-7px -4px;}
+    .paste-actions{flex-wrap:wrap;}   /* both buttons stay on-screen at 320px */
 
     /* reader */
     .reader-top{padding:max(16px, calc(env(safe-area-inset-top) + 8px)) 0 2px;}
     .doc-title .t{max-width:52vw;font-size:16px;}
+    .doc-title .meta{max-width:52vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .stage{padding:46px 14px;min-height:0;}
     .stage .guide.top{top:40px;} .stage .guide.bot{bottom:40px;}
     /* tighter words + a sooner edge-fade so neighbours stay subtle hints on a narrow screen */
@@ -485,17 +511,29 @@
     }
 
     .transport{gap:18px;margin-bottom:14px;}
-    .dock{padding:12px 0 calc(14px + env(safe-area-inset-bottom));}
+    /* with settings expanded the dock can outgrow a small phone — cap it and let it
+       scroll internally so the transport row is always reachable */
+    .dock{padding:12px 0 calc(14px + env(safe-area-inset-bottom));max-height:calc(100vh - 150px);max-height:calc(100dvh - 150px);overflow-y:auto;}
     .scrub{gap:10px;margin-bottom:12px;}
     .scrub .time{width:50px;font-size:11px;}
 
     .controls{gap:16px 16px;}
     .seg button{padding:13px 16px;}              /* ~44px touch targets */
+    /* long segments (Theme, per-type block modes) wrap instead of clipping off-screen */
+    .ctrl{max-width:100%;}
+    .seg{flex-wrap:wrap;max-width:100%;border-radius:22px;}
+    .bmg-row{flex-wrap:wrap;}
     .ctrl.slider-ctrl{order:-1;flex-basis:100%;align-items:center;}
     .ctrl.slider-ctrl .slider-row{width:100%;justify-content:center;}
     input[type=range]{width:min(72vw,280px);}
-    select.nav-sel{max-width:150px;padding:11px 14px;}
+    /* 16px so focusing the chapter select never triggers the iOS auto-zoom */
+    select.nav-sel{max-width:200px;padding:11px 14px;font-size:16px;}
     .kbd-hint{display:none;}                       /* no hardware keyboard on touch */
+  }
+
+  /* very narrow phones: the header can't seat the brand, badge and support pill */
+  @media (max-width:420px){
+    .patron-chip{display:none;}
   }
 
   /* medium-short viewports (e.g. phones with browser toolbars shown): trim the
@@ -630,7 +668,8 @@
   /* ---------- toasts ---------- */
   .toasts{
     position:fixed;left:0;right:0;top:calc(18px + env(safe-area-inset-top));z-index:200;
-    display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;padding:0 16px;
+    display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;
+    padding:0 max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left));
   }
   .toast{
     pointer-events:auto;display:flex;align-items:center;gap:12px;max-width:min(92vw,460px);

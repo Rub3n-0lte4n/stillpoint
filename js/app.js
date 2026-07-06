@@ -949,6 +949,12 @@ function applyTheme(id){
   theme = themeById(id).id;
   if(theme==="midnight") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = theme;
+  // keep the browser/PWA chrome (status bar, task switcher) on the theme's ground colour
+  const mc = document.querySelector('meta[name="theme-color"]');
+  if(mc){
+    const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg-0").trim();
+    mc.setAttribute("content", bg || "#080510");
+  }
   buildThemeSeg();
 }
 function requestTheme(id){
@@ -1106,6 +1112,19 @@ function init(){
 
   // auto-pause when the tab/window is hidden so you don't lose your place
   document.addEventListener("visibilitychange",()=>{ if(document.hidden && S.playing) pause(); });
+
+  // Re-centre the ribbon when the viewport changes (rotation, split-screen, browser
+  // chrome collapsing): its pixel offset comes from stage geometry, so a resize while
+  // paused would otherwise leave the focal word sitting off-centre.
+  let rzTimer=null;
+  const onViewportChange=()=>{
+    clearTimeout(rzTimer);
+    rzTimer=setTimeout(()=>{
+      if($("reader").classList.contains("show") && !$("ribbon").classList.contains("hidden")) render();
+    },120);
+  };
+  window.addEventListener("resize",onViewportChange);
+  if(window.visualViewport) window.visualViewport.addEventListener("resize",onViewportChange);
 
   document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render();});
