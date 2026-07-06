@@ -44,7 +44,36 @@ const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const REWIND_WORDS = 5;   // back up on resume for re-orientation
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
-const settings = { countdown:true, context:true, smartPacing:true, moreOpen:false };  // reading aids + dock state (persisted)
+const settings = { countdown:true, context:true, smartPacing:true, zen:true, moreOpen:false };  // reading aids + dock state (persisted)
+
+/* keep the screen awake while streaming — phones otherwise dim and lock mid-chapter,
+   because reading here never touches the screen */
+let wakeLock = null;
+async function acquireWakeLock(){ try{ if("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
+function releaseWakeLock(){ try{ if(wakeLock) wakeLock.release(); }catch(e){} wakeLock = null; }
+
+/* immersive reading: once the stream settles, fade the chrome so only the word remains.
+   pause() (any tap, Space, finishing) brings it back. */
+let zenTimer = null;
+function armZen(){ clearTimeout(zenTimer); if(!settings.zen) return; zenTimer = setTimeout(()=>{ if(S.playing && settings.zen) $("reader").classList.add("zen"); }, 1800); }
+function disarmZen(){ clearTimeout(zenTimer); zenTimer = null; $("reader").classList.remove("zen"); }
+
+/* one-time home-screen nudge, offered only after the first finished book */
+let deferredInstall = null;
+window.addEventListener("beforeinstallprompt", (e)=>{ e.preventDefault(); deferredInstall = e; });
+function isStandalone(){ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+function maybeNudgeInstall(){
+  try{
+    if(isStandalone() || localStorage.getItem("fp_install_nudged_v1")) return;
+    localStorage.setItem("fp_install_nudged_v1","1");
+    setTimeout(()=>{
+      toast("Read like this often? Put Stillpoint on your home screen.", { duration:9000, action:"Add", onAction:()=>{
+        if(deferredInstall){ deferredInstall.prompt(); deferredInstall = null; }
+        else toast("Open your browser's share or menu button and choose Add to Home Screen.", { duration:9000 });
+      }});
+    }, 1200);
+  }catch(e){}
+}
 
 /* ---------------- centred ribbon ----------------
    One centred line of words. The current word's pivot letter is snapped onto the
@@ -172,6 +201,14 @@ function play(){
   $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
   $("playBtn").setAttribute("aria-label","Pause");
   updateProgress();
+  acquireWakeLock();
+  armZen();
+  try{
+    if(!localStorage.getItem("fp_hint_zones_v1")){
+      localStorage.setItem("fp_hint_zones_v1","1");
+      toast("Tip: tap the edges of the reading area to step back or ahead a sentence.", { duration:6000 });
+    }
+  }catch(e){}
   if(settings.countdown){
     countdownThenStep();
   } else {
@@ -199,6 +236,8 @@ function countdownThenStep(){
 function pause(){
   S.playing=false;
   clearTimeout(S.timer);
+  releaseWakeLock();
+  disarmZen();
   if(S.playStart){ S.readMs += Date.now()-S.playStart; S.playStart=null; }
   $("ribbon").classList.remove("playing");   // brighten neighbours for orientation while paused
   $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
@@ -221,6 +260,7 @@ function finish(){
   $("doneSub").textContent = `You finished “${S.title}”.`;
   $("done").classList.add("show");
   $("doneLib").focus({preventScroll:true});   // move focus into the dialog
+  maybeNudgeInstall();
 }
 
 // Keep Tab focus inside an open dialog (basic focus trap for the modals).
@@ -282,6 +322,7 @@ function renderBlockInto(el, block){
 // pause/hybrid — halt the stream and raise the still card.
 function presentBlock(block, mode){
   clearTimeout(S.timer);
+  disarmZen();   // a raised card needs its chrome
   // Time spent studying a figure isn't streaming time — pause the reading clock
   // so the finish-screen average WPM stays honest.
   if(S.playStart){ S.readMs += Date.now()-S.playStart; S.playStart = null; }
@@ -320,7 +361,7 @@ function continueStream(){
   }
   S.pendingRange = null;
   S.rampStart = S.index;
-  if(S.playing){ S.playStart = Date.now(); step(); }
+  if(S.playing){ S.playStart = Date.now(); armZen(); step(); }
 }
 
 // skip — never interrupt; collect into the appendix + document index.
@@ -555,10 +596,17 @@ function renderLibrary(){
   list.innerHTML="";
   lib.forEach(item=>{
     const pct = item.total ? Math.round(item.index/item.total*100) : 0;
+    // honest finishing nudge: time left at the reader's own pace
+    let prog = pct+"%";
+    if(item.total && item.index>=item.total) prog = "Finished";
+    else if(item.total){
+      const m = Math.max(1, Math.ceil((item.total-item.index)/S.wpm));
+      prog = `${pct}% · ~${m>=120 ? Math.round(m/60)+"h" : m+"m"} left`;
+    }
     const el=document.createElement("div"); el.className="recent-item";
     el.innerHTML=`<span class="ri-type">${esc(item.type||"TEXT")}</span>
       <span class="ri-name">${esc(item.title)}</span>
-      <span class="ri-prog">${pct}%</span>
+      <span class="ri-prog">${prog}</span>
       <span class="ri-x" title="Remove">✕</span>`;
     el.querySelector(".ri-name").onclick=el.querySelector(".ri-type").onclick=el.querySelector(".ri-prog").onclick=()=>openFromStore(item);
     el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); removeItem(item); };
@@ -891,6 +939,7 @@ async function importBackup(file){
         if(typeof data.prefs.countdown==="boolean") settings.countdown = data.prefs.countdown;
         if(typeof data.prefs.context==="boolean")   settings.context   = data.prefs.context;
         if(typeof data.prefs.smartPacing==="boolean") settings.smartPacing = data.prefs.smartPacing;
+        if(typeof data.prefs.zen==="boolean") settings.zen = data.prefs.zen;
         applyAids();
       }catch(e){}
     }
@@ -1116,8 +1165,26 @@ function init(){
   $("fwdBtn").onclick=fwdSentence;
   $("homeBtn").onclick=requestHome;
   $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); requestHome(); }});
-  // tap the reading area to play/pause (large, mobile-friendly target)
-  $("stage").addEventListener("click",()=>{ if(S.cardOpen){ resumeFromCard(); return; } toggle(); Haptics.trigger("light"); });
+  // tap the reading area: the middle plays/pauses, the edges step a sentence.
+  // Zones only arm once reading has started, so the first tap always just begins.
+  const zoneFlash=(dir)=>{
+    const el=$("zoneFlash"); if(!el) return;
+    el.textContent = dir<0 ? "‹" : "›";
+    el.classList.remove("l","r","on"); void el.offsetWidth;   // restart the animation
+    el.classList.add(dir<0?"l":"r","on");
+  };
+  $("stage").addEventListener("click",(e)=>{
+    if(S.cardOpen){ resumeFromCard(); return; }
+    Haptics.trigger("light");
+    const started = $("resting").classList.contains("hidden");
+    if(started && S.tokens.length){
+      const r=$("stage").getBoundingClientRect();
+      const x=(e.clientX-r.left)/r.width;
+      if(x<0.2){ backSentence(); zoneFlash(-1); return; }
+      if(x>0.8){ fwdSentence(); zoneFlash(1); return; }
+    }
+    toggle();
+  });
 
   // Cmd/Ctrl+Enter begins reading straight from the paste box (lower friction than reaching for the button)
   $("paste").addEventListener("keydown",e=>{ if(e.key==="Enter" && (e.metaKey||e.ctrlKey)){ e.preventDefault(); $("pasteGo").click(); }});
@@ -1146,6 +1213,8 @@ function init(){
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render();});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
+  $("wpmDown").onclick=()=>{ setWpm(Math.max(150,S.wpm-25)); Haptics.trigger("light"); };
+  $("wpmUp").onclick =()=>{ setWpm(Math.min(800,S.wpm+25)); Haptics.trigger("light"); };
 
   // "Reading settings" disclosure for the secondary controls
   $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
@@ -1186,6 +1255,7 @@ function init(){
   document.querySelectorAll("#aidSeg button").forEach(b=>b.onclick=()=>{
     const k=b.dataset.aid; settings[k]=!settings[k]; applyAids();
     if(k==="context") $("ribbon").classList.toggle("no-ctx", !settings.context);
+    if(k==="zen"){ settings.zen ? (S.playing && armZen()) : disarmZen(); }
     Haptics.trigger("light");
   });
 
@@ -1253,6 +1323,7 @@ function init(){
     if(typeof prefs.countdown==="boolean") settings.countdown=prefs.countdown;
     if(typeof prefs.context==="boolean") settings.context=prefs.context;
     if(typeof prefs.smartPacing==="boolean") settings.smartPacing=prefs.smartPacing;
+    if(typeof prefs.zen==="boolean") settings.zen=prefs.zen;
     if(typeof prefs.moreOpen==="boolean") settings.moreOpen=prefs.moreOpen;
     // patron themes survive restarts, but never boot a locked theme into the pitch modal
     if(prefs.theme) applyTheme((isPatron() || !isPatronTheme(prefs.theme)) ? prefs.theme : "midnight");
@@ -1261,9 +1332,19 @@ function init(){
   buildThemeSeg();
 
   renderLibrary();
+
+  // A file shared into the PWA (Web Share Target) is stashed by the service worker
+  // under shared::pending; pick it up, clean the URL, and open it like any upload.
+  if(new URLSearchParams(location.search).get("shared")){
+    history.replaceState(null,"",location.pathname);
+    Store.get("shared::pending").then(rec=>{
+      if(rec && rec.file){ Store.del("shared::pending").catch(()=>{}); handleFile(rec.file); }
+    }).catch(()=>{});
+  }
+
   // Persist prefs on every "might be leaving" signal — beforeunload alone never
   // fires on iOS Safari / standalone PWA, which would silently drop settings there.
-  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,moreOpen:settings.moreOpen,theme})); }catch(e){} };
+  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,zen:settings.zen,moreOpen:settings.moreOpen,theme})); }catch(e){} };
   window.addEventListener("beforeunload",savePrefs);
   window.addEventListener("pagehide",savePrefs);
   document.addEventListener("visibilitychange",()=>{ if(document.hidden) savePrefs(); });

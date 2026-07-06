@@ -3,7 +3,7 @@
    runtime. Books are stored locally in IndexedDB (see js/store.js), so once you've
    opened the app online, both it and your library work with no connection.
    Bump CACHE_VERSION whenever shell files change so clients pick up the update. */
-const CACHE_VERSION = "stillpoint-v26";
+const CACHE_VERSION = "stillpoint-v27";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
 // All paths are relative to this file (served at /stillpoint/sw.js).
@@ -53,8 +53,24 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  if (req.method !== "GET") return;
   const url = new URL(req.url);
+
+  // Web Share Target: another app shares a PDF/EPUB to Stillpoint (Android).
+  // Stash the file in the app's IndexedDB, then land on the app, which opens it
+  // (see the shared::pending pickup in js/app.js init).
+  if (req.method === "POST" && url.origin === self.location.origin && url.pathname.endsWith("/share-target")) {
+    event.respondWith((async () => {
+      try {
+        const form = await req.formData();
+        const file = form.get("book");
+        if (file && file.size) await idbPutShared({ file, name: file.name || "Shared file", ts: Date.now() });
+      } catch (e) { /* fall through; the app just opens normally */ }
+      return Response.redirect("./?shared=1", 303);
+    })());
+    return;
+  }
+
+  if (req.method !== "GET") return;
 
   // Google Fonts (CSS + font files): cache-first, populate on first online load.
   if (FONT_HOSTS.includes(url.hostname)) {
@@ -90,3 +106,22 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+// Minimal IndexedDB access matching js/store.js (db "stillpoint" / store "files").
+// The SW can't import that ES module, so the two definitions must stay in sync.
+function idbPutShared(rec) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open("stillpoint", 1);
+    open.onupgradeneeded = () => {
+      const d = open.result;
+      if (!d.objectStoreNames.contains("files")) d.createObjectStore("files");
+    };
+    open.onsuccess = () => {
+      const t = open.result.transaction("files", "readwrite");
+      t.objectStore("files").put(rec, "shared::pending");
+      t.oncomplete = () => resolve();
+      t.onerror = t.onabort = () => reject(t.error);
+    };
+    open.onerror = () => reject(open.error);
+  });
+}

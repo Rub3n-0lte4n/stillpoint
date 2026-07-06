@@ -228,6 +228,7 @@
         <div class="resting" id="resting">Tap to begin<span class="kb-only"> · or press space</span></div>
         <div class="word hidden" id="word" aria-hidden="true"></div>
         <div class="ribbon-clip"><div class="ribbon hidden" id="ribbon" aria-hidden="true"></div></div>
+        <div class="zone-flash" id="zoneFlash" aria-hidden="true"></div>
       </div>
 
       <!-- Block still card: full presentation over the stage -->
@@ -288,7 +289,9 @@
         <div class="ctrl slider-ctrl">
           <label>Speed · <span id="presetLabel">Focus</span></label>
           <div class="slider-row">
+            <button type="button" class="wpm-step" id="wpmDown" aria-label="Slower">−</button>
             <input type="range" id="wpm" min="150" max="800" step="10" value="400" />
+            <button type="button" class="wpm-step" id="wpmUp" aria-label="Faster">+</button>
             <span class="val"><span id="wpmVal">400</span> wpm</span>
           </div>
         </div>
@@ -330,6 +333,7 @@
               <button type="button" data-aid="countdown" class="active" aria-pressed="true">Countdown</button>
               <button type="button" data-aid="context" class="active" aria-pressed="true">Context</button>
               <button type="button" data-aid="smartPacing" class="active" aria-pressed="true" title="Slow down on long/complex sentences">Smart pace</button>
+            <button type="button" data-aid="zen" class="active" aria-pressed="true" title="Fade the controls away while reading">Immersive</button>
             </div>
           </div>
 
