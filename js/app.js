@@ -6,6 +6,7 @@ import { Store } from "./store.js";
 import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
 import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exportMarkdown } from "./highlights.js";
 import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js";
+import { Streak, GOAL_STEP } from "./streak.js";
 
 /* ---------------- state ---------------- */
 const S = {
@@ -233,12 +234,25 @@ function countdownThenStep(){
   };
   tick();
 }
+// Settle the running play segment into readMs AND the daily streak ledger.
+// The one choke point for reading-time accrual. Crossing the daily goal is
+// detected here — at a pause — which is exactly when the celebration may
+// appear without ever interrupting the word stream.
+function settleReading(){
+  if(!S.playStart) return;
+  const ms = Date.now()-S.playStart;
+  S.readMs += ms; S.playStart = null;
+  const { crossed, current } = Streak.addSeconds(ms/1000);
+  if(crossed && !document.hidden)
+    toast(current > 1 ? `Goal met. ${current} days in a row.` : "Goal met. Your streak starts today.");
+  renderStreak();
+}
 function pause(){
   S.playing=false;
   clearTimeout(S.timer);
   releaseWakeLock();
   disarmZen();
-  if(S.playStart){ S.readMs += Date.now()-S.playStart; S.playStart=null; }
+  settleReading();
   $("ribbon").classList.remove("playing");   // brighten neighbours for orientation while paused
   $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
   $("playBtn").setAttribute("aria-label","Play");
@@ -258,6 +272,13 @@ function finish(){
   $("stTime").textContent = fmt(S.readMs/1000);
   $("stWpm").textContent = avg.toLocaleString();
   $("doneSub").textContent = `You finished “${S.title}”.`;
+  // quiet streak line — met: affirm the day; unmet: an honest, concrete nudge
+  const sk = Streak.getState();
+  if(sk.metToday) $("doneStreak").textContent = `Day ${sk.current} of your reading streak.`;
+  else{
+    const left = Math.max(1, Math.ceil((sk.goalMin*60 - sk.todaySec)/60));
+    $("doneStreak").textContent = `${left} more minute${left===1?"":"s"} today ${sk.current>0 ? "keeps the streak" : "starts a streak"}.`;
+  }
   $("done").classList.add("show");
   $("doneLib").focus({preventScroll:true});   // move focus into the dialog
   maybeNudgeInstall();
@@ -325,7 +346,7 @@ function presentBlock(block, mode){
   disarmZen();   // a raised card needs its chrome
   // Time spent studying a figure isn't streaming time — pause the reading clock
   // so the finish-screen average WPM stays honest.
-  if(S.playStart){ S.readMs += Date.now()-S.playStart; S.playStart = null; }
+  settleReading();
   S.cardOpen = true; S.previewing = false; S.currentBlock = block;
   $("ribbon").classList.remove("playing");
   $("bcKind").textContent = KIND_LABEL[block.kind] || "Block";
@@ -627,6 +648,30 @@ function toast(msg, {action, onAction, duration=4500, error=false}={}){
   return dismiss;
 }
 
+/* ---------------- reading streak (landing strip) ---------------- */
+// Hidden until there's anything to show (any ledger data or a non-empty library),
+// same gating spirit as #backup. Ring = today's minutes toward the daily goal.
+const RING_C = 2*Math.PI*15.5;   // circumference of the progress ring circle
+function renderStreak(){
+  const el=$("streakStrip"); if(!el) return;
+  const st=Streak.getState();
+  const show = Streak.hasData() || loadLib().length>0;
+  el.classList.toggle("hidden", !show);
+  if(!show) return;
+  $("streakCount").textContent = st.current;
+  const best=$("streakBest");
+  best.classList.toggle("hidden", !(st.best>st.current));
+  best.textContent = "best "+st.best;
+  $("goalVal").textContent = st.goalMin+" min a day";
+  const fill=$("streakRingFill");
+  fill.style.strokeDasharray = RING_C;
+  fill.style.strokeDashoffset = RING_C * (1 - Math.min(1, st.todaySec/(st.goalMin*60)));
+  const mins = Math.floor(st.todaySec/60);
+  $("streakRing").setAttribute("aria-label",
+    st.metToday ? `Daily goal met. ${mins} minute${mins===1?"":"s"} read today`
+    : st.todaySec>0 ? `${mins} of ${st.goalMin} minutes read today` : "No reading yet today");
+}
+
 /* ---------------- resume / library (localStorage) ---------------- */
 const LIB_KEY="fp_library_v1";
 function loadLib(){ try{return JSON.parse(localStorage.getItem(LIB_KEY))||[];}catch(e){return [];} }
@@ -773,7 +818,7 @@ function showLibrary(){
   $("done").classList.remove("show");
   $("reader").classList.remove("show");
   $("landing").style.display="";
-  renderLibrary();
+  renderLibrary(); renderStreak();
   $("dropzone").focus({preventScroll:true});
 }
 // Route user-initiated exits through history so the browser/hardware Back button
@@ -908,7 +953,7 @@ async function buildBackup(){
     try{ const bm = await Store.getBlockMode(item.key); if(bm) blockModes[item.key]=bm; }catch(e){}
     try{ const hl = await Store.getHighlights(item.key); if(hl) highlights[item.key]=hl; }catch(e){}
   }
-  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights };
+  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights, streak:Streak.raw()||undefined };
   return { blob:new Blob([JSON.stringify(backup)], { type:"application/json" }), count:files.length };
 }
 
@@ -993,7 +1038,8 @@ async function importBackup(file){
         applyAids();
       }catch(e){}
     }
-    hideParse(); renderLibrary();
+    if(data.streak) Streak.importMerge(data.streak);
+    hideParse(); renderLibrary(); renderStreak();
     toast(`Imported ${restored} book${restored===1?"":"s"} into your library.`);
   }catch(err){ hideParse(); toast("Couldn't import that backup: "+(err&&err.message?err.message:err), {error:true}); }
 }
@@ -1316,6 +1362,10 @@ function init(){
   sheetSwipe($("toc"), closeToc);
   sheetSwipe($("moreWrap"), ()=>setSettingsOpen(false));
   placeModeCtrl();
+
+  // daily goal stepper on the streak strip
+  $("goalDown").onclick=()=>{ Streak.setGoal(Streak.getState().goalMin-GOAL_STEP); renderStreak(); Haptics.trigger("light"); };
+  $("goalUp").onclick =()=>{ Streak.setGoal(Streak.getState().goalMin+GOAL_STEP); renderStreak(); Haptics.trigger("light"); };
   // tap the card chrome (not its body/buttons) to resume
   $("blockCard").addEventListener("click",e=>{ if(e.target.id==="blockCard" || (e.target.classList&&e.target.classList.contains("bc-head"))) resumeFromCard(); });
   // block presentation mode: global segment + per-type overrides
@@ -1429,7 +1479,7 @@ function init(){
   setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(isSheet() ? false : settings.moreOpen);
   buildThemeSeg();
 
-  renderLibrary();
+  renderLibrary(); renderStreak();
 
   // A file shared into the PWA (Web Share Target) is stashed by the service worker
   // under shared::pending; pick it up, clean the URL, and open it like any upload.
@@ -1444,7 +1494,8 @@ function init(){
   // fires on iOS Safari / standalone PWA, which would silently drop settings there.
   const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,zen:settings.zen,moreOpen:settings.moreOpen,theme})); }catch(e){} };
   window.addEventListener("beforeunload",savePrefs);
-  window.addEventListener("pagehide",savePrefs);
+  // a killed tab mid-play still credits the segment to the streak ledger
+  window.addEventListener("pagehide",()=>{ settleReading(); savePrefs(); });
   document.addEventListener("visibilitychange",()=>{ if(document.hidden) savePrefs(); });
 }
 

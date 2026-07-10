@@ -142,6 +142,26 @@
       <div class="recent-list" id="recentList"></div>
     </div>
 
+    <section class="streak hidden" id="streakStrip" aria-label="Reading streak">
+      <h4>Reading streak</h4>
+      <div class="streak-row">
+        <svg class="streak-ring" id="streakRing" viewBox="0 0 36 36" role="img" aria-label="No reading yet today">
+          <circle class="ring-track" cx="18" cy="18" r="15.5"/>
+          <circle class="ring-fill" id="streakRingFill" cx="18" cy="18" r="15.5"/>
+        </svg>
+        <div class="streak-nums">
+          <b id="streakCount">0</b>
+          <span class="streak-label">day streak</span>
+          <span class="streak-best hidden" id="streakBest"></span>
+        </div>
+        <div class="streak-goal">
+          <button type="button" class="wpm-step" id="goalDown" aria-label="Lower daily goal">−</button>
+          <span class="goal-val" id="goalVal">5 min a day</span>
+          <button type="button" class="wpm-step" id="goalUp" aria-label="Raise daily goal">+</button>
+        </div>
+      </div>
+    </section>
+
     <div class="backup hidden" id="backup">
       <div class="backup-head">Move to another device</div>
       <p class="backup-copy">Your whole library packs into one file, books included, along with your positions and settings. Share it straight to another device (AirDrop, Messages…) or export it, then tap Import there. No account, no server. Your data stays in your hands.</p>
@@ -393,6 +413,7 @@
       <div><b id="stTime">0:00</b><span>reading time</span></div>
       <div><b id="stWpm">0</b><span>avg wpm</span></div>
     </div>
+    <p class="done-streak" id="doneStreak"></p>
     <div class="done-actions">
       <button type="button" class="btn ghost" id="doneReview">Review highlights</button>
       <button type="button" class="btn ghost" id="doneShare">Share result</button>
