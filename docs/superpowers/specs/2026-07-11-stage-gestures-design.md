@@ -9,9 +9,11 @@ speed, horizontal swipe = sentence navigation, pinch = text size.
 
 1. **Vertical drag on the stage adjusts wpm.** Up = faster. Live: one 25 wpm step
    per ~12px of travel, clamped 150–800. A ghost readout (gold Archivo number +
-   "wpm" label) fades in near the top of the stage while dragging, haptic tick
-   per step, fades out shortly after release. Works while playing, paused, and
-   in the resting state (set your pace before starting).
+   "wpm" label) fades in near the top of the stage while dragging and fades out
+   shortly after release. Haptics are sparing (user request, battery): one tick
+   when the drag engages and one on hitting a range wall — never per step.
+   Works while playing, paused, and in the resting state (set your pace before
+   starting).
 2. **Horizontal swipe steps a sentence.** Swipe right = back, left = forward —
    the same actions as the edge tap zones, reusing the `#zoneFlash` chevrons.
    Armed only once reading has started (same rule as tap zones).

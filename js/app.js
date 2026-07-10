@@ -1333,7 +1333,13 @@ function init(){
   const speedGhost=(v,phase)=>{
     const g=$("speedGhost");
     $("sgVal").textContent=v;
-    if(v!==S.wpm){ setWpm(v); Haptics.trigger("light"); }
+    // haptics stay sparing: one tick when the drag engages, one on hitting a
+    // range wall — never per step (battery, and the readout is the feedback)
+    if(phase==="move" && !g.classList.contains("on")) Haptics.trigger("light");
+    if(v!==S.wpm){
+      setWpm(v);
+      if(v===150 || v===800) Haptics.trigger("light");
+    }
     clearTimeout(ghostTimer);
     if(phase==="move") g.classList.add("on");
     else ghostTimer=setTimeout(()=>g.classList.remove("on"), 400);
@@ -1391,9 +1397,12 @@ function init(){
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render();});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
-  const stepWpm=(d)=>()=>{ setWpm(Math.min(800,Math.max(150,S.wpm+d))); Haptics.trigger("light"); };
+  // one tick per press (pointerdown), silent during the hold-repeat ramp
+  const stepWpm=(d)=>()=>setWpm(Math.min(800,Math.max(150,S.wpm+d)));
   holdRepeat($("wpmDown"), stepWpm(-25));
   holdRepeat($("wpmUp"),  stepWpm(25));
+  $("wpmDown").addEventListener("pointerdown",()=>Haptics.trigger("light"));
+  $("wpmUp").addEventListener("pointerdown",()=>Haptics.trigger("light"));
 
   // "Reading settings" disclosure for the secondary controls
   $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
@@ -1417,9 +1426,11 @@ function init(){
   placeModeCtrl();
 
   // daily goal stepper on the streak strip
-  const stepGoal=(d)=>()=>{ Streak.setGoal(Streak.getState().goalMin+d); renderStreak(); Haptics.trigger("light"); };
+  const stepGoal=(d)=>()=>{ Streak.setGoal(Streak.getState().goalMin+d); renderStreak(); };
   holdRepeat($("goalDown"), stepGoal(-GOAL_STEP));
   holdRepeat($("goalUp"),  stepGoal(GOAL_STEP));
+  $("goalDown").addEventListener("pointerdown",()=>Haptics.trigger("light"));
+  $("goalUp").addEventListener("pointerdown",()=>Haptics.trigger("light"));
   // tap the card chrome (not its body/buttons) to resume
   $("blockCard").addEventListener("click",e=>{ if(e.target.id==="blockCard" || (e.target.classList&&e.target.classList.contains("bc-head"))) resumeFromCard(); });
   // block presentation mode: global segment + per-type overrides
