@@ -71,7 +71,35 @@ export async function parsePDF(file, onProgress = ()=>{}){
     if(p % 5 === 0) await new Promise(r=>setTimeout(r)); // yield to keep UI responsive
   }
   if(tokens.length===0) throw new Error("This PDF has no extractable text (it may be scanned images).");
-  return { tokens, units, blocks, pages: pdf.numPages };
+  // Declared contents: the PDF outline (bookmarks) — what Apple Books lists.
+  // Entries map to the start of their destination page; absent or broken
+  // outlines fall back to the plain page list.
+  let nav=null;
+  try{
+    const outline = await pdf.getOutline();
+    if(outline && outline.length){
+      const entries=[];
+      const addItems = async(items, depth)=>{
+        for(const it of items||[]){
+          try{
+            let dest = it.dest;
+            if(typeof dest === "string") dest = await pdf.getDestination(dest);
+            if(Array.isArray(dest) && dest[0]!=null){
+              const pageIndex = await pdf.getPageIndex(dest[0]);
+              const u = units[pageIndex];
+              const title = String(it.title||"").replace(/\s+/g," ").trim().slice(0,80);
+              if(u && title) entries.push({ title, start: u.start, depth });
+            }
+          }catch(e){ /* unresolvable destination — skip the entry */ }
+          if(depth < 2) await addItems(it.items, depth+1);
+        }
+      };
+      await addItems(outline, 0);
+      const deduped = entries.filter((e,i)=> i===0 || e.start !== entries[i-1].start);
+      if(deduped.length >= 2) nav = deduped;
+    }
+  }catch(e){}
+  return { tokens, units, blocks, pages: pdf.numPages, nav };
 }
 
 // Multiply two 6-element affine matrices [a,b,c,d,e,f] (pdf.js Util order).
@@ -234,8 +262,11 @@ async function resolveEpubImage(zip, sectionDir, src){
 export async function walkSection(body, ctx){
   const sTokens = [];          // section-local tokens
   const sBlocks = [];          // section-local { kind, payload, after }
+  const sAnchors = {};         // element id → token offset (for ToC fragment targets)
   let buffer = "";
   const flush = ()=>{ if(buffer.trim()){ for(const t of tokenize(buffer)) sTokens.push(t); } buffer=""; };
+  // Approximate without flushing so anchor collection never alters tokenization.
+  const here = ()=> sTokens.length + (buffer.trim() ? buffer.trim().split(/\s+/).length : 0);
 
   async function walk(node){
     for(const child of node.childNodes){
@@ -243,6 +274,8 @@ export async function walkSection(body, ctx){
       if(child.nodeType !== 1) continue;
       const tag = (child.tagName||"").toLowerCase();
       if(tag === "script" || tag === "style") continue;
+      const aid = child.getAttribute && child.getAttribute("id");
+      if(aid && !(aid in sAnchors)) sAnchors[aid] = here();
       const kind = EPUB_BLOCK_KIND[tag];
       if(kind){
         flush();
@@ -255,7 +288,93 @@ export async function walkSection(body, ctx){
   }
   await walk(body);
   flush();
-  return { sTokens, sBlocks };
+  return { sTokens, sBlocks, sAnchors };
+}
+
+/* ---------------- declared table of contents (what Apple Books shows) ----------------
+   An EPUB carries an author-written ToC: the EPUB3 nav document (manifest item with
+   properties="nav"), or the EPUB2 NCX. Its entries are the book's real contents —
+   front matter, parts, chapters — unlike our reading units, which are simply every
+   spine file. Entries map to token offsets via each section's start plus the
+   fragment anchor when one is present. Returns [{title, start, depth}] or null. */
+async function extractEpubNav(zip, xml, opfDoc, opfDir, sectionMap){
+  let navHref = null, ncxHref = null;
+  for(const it of Array.from(opfDoc.getElementsByTagNameNS("*","item"))){
+    const props = (it.getAttribute("properties")||"").split(/\s+/);
+    if(props.includes("nav") && !navHref) navHref = it.getAttribute("href");
+    if((it.getAttribute("media-type")||"") === "application/x-dtbncx+xml" && !ncxHref) ncxHref = it.getAttribute("href");
+  }
+
+  const clean = (s)=> String(s||"").replace(/\s+/g," ").trim().slice(0,80);
+  const resolveEntry = (docDir, href)=>{
+    if(!href) return null;
+    const frag = href.includes("#") ? href.split("#")[1] : null;
+    const sec = sectionMap[resolveZipPath(docDir, href)];
+    if(!sec) return null;
+    return sec.start + ((frag && sec.anchors && sec.anchors[frag]) || 0);
+  };
+  const out = [];
+
+  const readNavDoc = (text, docDir)=>{
+    const doc = xml.parseFromString(text, "text/html");
+    let nav = null;
+    for(const n of Array.from(doc.querySelectorAll("nav"))){
+      const t = n.getAttribute("epub:type") || n.getAttribute("role") || "";
+      if(/(^|\s)(toc|doc-toc)(\s|$)/.test(t)){ nav = n; break; }
+    }
+    nav = nav || doc.querySelector("nav");
+    if(!nav) return;
+    const walkList = (ol, depth)=>{
+      for(const li of Array.from(ol.children||[])){
+        if((li.tagName||"").toLowerCase() !== "li") continue;
+        const a = Array.from(li.children||[]).find(c=>(c.tagName||"").toLowerCase()==="a");
+        if(a){
+          const start = resolveEntry(docDir, a.getAttribute("href"));
+          const title = clean(a.textContent);
+          if(start!=null && title) out.push({ title, start, depth });
+        }
+        const sub = Array.from(li.children||[]).find(c=>(c.tagName||"").toLowerCase()==="ol");
+        if(sub && depth < 2) walkList(sub, depth+1);
+      }
+    };
+    const ol = nav.querySelector("ol");
+    if(ol) walkList(ol, 0);
+  };
+
+  const readNcx = (text, docDir)=>{
+    const doc = xml.parseFromString(text, "application/xml");
+    const walkPoints = (parent, depth)=>{
+      for(const np of Array.from(parent.children||[])){
+        if((np.tagName||"").toLowerCase() !== "navpoint") continue;
+        const label = np.getElementsByTagNameNS("*","text")[0];
+        const content = np.getElementsByTagNameNS("*","content")[0];
+        const start = content && resolveEntry(docDir, content.getAttribute("src"));
+        const title = clean(label && label.textContent);
+        if(start!=null && title) out.push({ title, start, depth });
+        if(depth < 2) walkPoints(np, depth+1);
+      }
+    };
+    const map = doc.getElementsByTagNameNS("*","navMap")[0];
+    if(map) walkPoints(map, 0);
+  };
+
+  const dirOf = (p)=> p.includes("/") ? p.replace(/\/[^/]*$/, "/") : "";
+  try{
+    if(navHref){
+      const p = resolveZipPath(opfDir, navHref);
+      const entry = zipEntry(zip, p);
+      if(entry) readNavDoc(await entry.async("string"), dirOf(p));
+    }
+    if(out.length < 2 && ncxHref){
+      out.length = 0;
+      const p = resolveZipPath(opfDir, ncxHref);
+      const entry = zipEntry(zip, p);
+      if(entry) readNcx(await entry.async("string"), dirOf(p));
+    }
+  }catch(e){ /* a malformed ToC never blocks reading — fall back to units */ }
+  // nested entries that resolve to the same spot collapse into their parent
+  const nav = out.filter((e,i)=> i===0 || e.start !== out[i-1].start);
+  return nav.length >= 2 ? nav : null;
 }
 
 // Build a block payload for an EPUB element. Images → blobUrl; html blocks →
@@ -307,6 +426,7 @@ export async function parseEPUB(file, onProgress = ()=>{}){
   const itemrefs = Array.from(opfDoc.getElementsByTagNameNS("*","itemref"));
 
   const tokens=[]; const units=[]; const blocks=[]; let chapters=0;
+  const sectionMap={};   // normalized zip path → { start, anchors } for the declared ToC
   for(let i=0;i<itemrefs.length;i++){
     const href = manifest[itemrefs[i].getAttribute("idref")];
     if(href){
@@ -318,9 +438,9 @@ export async function parseEPUB(file, onProgress = ()=>{}){
           const body = doc.body || doc.documentElement;
           if(body && body.querySelectorAll) body.querySelectorAll("script,style").forEach(el=>el.remove());
           const sectionDir = sectionPath.includes("/") ? sectionPath.replace(/\/[^/]*$/, "") : "";
-          const { sTokens, sBlocks } = body
+          const { sTokens, sBlocks, sAnchors } = body
             ? await walkSection(body, { zip, sectionDir })
-            : { sTokens:[], sBlocks:[] };
+            : { sTokens:[], sBlocks:[], sAnchors:{} };
           if(sTokens.length>3){
             chapters++;
             let title = `Chapter ${chapters}`;
@@ -329,6 +449,7 @@ export async function parseEPUB(file, onProgress = ()=>{}){
             const unitIndex = units.length;
             const offset = tokens.length;
             units.push({ title, start: offset });
+            sectionMap[sectionPath] = { start: offset, anchors: sAnchors || {} };
             for(const t of sTokens) tokens.push(t);
             for(const b of sBlocks){
               blocks.push({ id:`blk-${blocks.length}`, after: offset + b.after, kind: b.kind, payload: b.payload, unit: unitIndex });
@@ -341,5 +462,7 @@ export async function parseEPUB(file, onProgress = ()=>{}){
     if(i % 4 === 0) await new Promise(r=>setTimeout(r));
   }
   if(tokens.length===0) throw new Error("Couldn't extract readable text from this EPUB. It may be image-only (scanned) or DRM-protected.");
-  return { tokens, units, blocks, chapters };
+  let nav=null;
+  try{ nav = await extractEpubNav(zip, xml, opfDoc, opfDir, sectionMap); }catch(e){}
+  return { tokens, units, blocks, chapters, nav };
 }

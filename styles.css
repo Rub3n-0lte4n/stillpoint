@@ -515,6 +515,9 @@
   }
   .toc-item:hover{background:var(--surface-2);color:var(--ink);}
   .toc-item.current{color:var(--gold);background:var(--surface-2);}
+  /* nested declared-ToC entries (parts → chapters → sections) indent like Books */
+  .toc-item.d1{padding-left:28px;font-size:13.5px;}
+  .toc-item.d2{padding-left:44px;font-size:13px;color:var(--ink-mute);}
   .toc-figs{
     flex:none;margin-top:8px;font:inherit;font-size:13px;color:var(--ink-soft);text-align:left;
     background:none;border:none;border-top:1px solid var(--hair-soft);padding:14px 12px 6px;cursor:pointer;

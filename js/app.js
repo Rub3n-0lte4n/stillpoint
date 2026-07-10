@@ -464,9 +464,9 @@ function closeFigIndex(){ $("figIndex").classList.add("hidden"); }
 // word stream is a deliberate interruption.
 function renderToc(){
   const list=$("tocList"); list.innerHTML="";
-  chapterItems(S.units, S.index).forEach(it=>{
+  chapterItems(S.nav || S.units, S.index).forEach(it=>{
     const b=document.createElement("button");
-    b.type="button"; b.className="toc-item"+(it.current?" current":"");
+    b.type="button"; b.className="toc-item"+(it.depth?" d"+Math.min(it.depth,2):"")+(it.current?" current":"");
     b.textContent=it.title;
     if(it.current) b.setAttribute("aria-current","true");
     b.onclick=()=>{ jumpTo(it.start); closeToc(); };
@@ -723,8 +723,11 @@ function removeItem(item){
 }
 
 /* ---------------- loading a document ---------------- */
-function openReader(tokens, units, title, meta, key, blocks){
+function openReader(tokens, units, title, meta, key, blocks, nav){
   S.tokens=tokens; S.units=units&&units.length?units:[{title:"Start",start:0}];
+  // The declared ToC (EPUB nav/NCX, PDF outline) when the book has one — this is
+  // what the Contents panel lists, like Apple Books. Units remain the reading grid.
+  S.nav = (Array.isArray(nav) && nav.length>1) ? nav : null;
   S.title=title; S.meta=meta; S.key=key; S.index=0;
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   const prior = loadLib().find(x=>x.key===key);
@@ -759,7 +762,7 @@ function openReader(tokens, units, title, meta, key, blocks){
   $("docTitle").textContent=title;
   $("docMeta").textContent=meta;
   S.curUnit=0;
-  $("tocToggle").classList.toggle("hidden", S.units.length<2 && S.blocks.length===0);
+  $("tocToggle").classList.toggle("hidden", (S.nav||S.units).length<2 && S.blocks.length===0);
 
   $("landing").style.display="none";
   $("reader").classList.add("show");
@@ -803,11 +806,11 @@ async function openFromStore(item){
   showParse("Opening "+item.title+"…","Reading from this device",{kind:rec.kind,name:rec.name||item.title,size:rec.blob?rec.blob.size:0});
   try{
     if(rec.kind==="pdf"){
-      const {tokens,units,pages,blocks}=await parsePDF(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key,blocks);
+      const {tokens,units,pages,blocks,nav}=await parsePDF(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key,blocks,nav);
     } else {
-      const {tokens,units,chapters,blocks}=await parseEPUB(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key,blocks);
+      const {tokens,units,chapters,blocks,nav}=await parseEPUB(rec.blob, setParse);
+      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key,blocks,nav);
     }
   }catch(err){ hideParse(); toast("Couldn't reopen that file: "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>openFromStore(item)}); }
 }
@@ -854,14 +857,14 @@ async function handleFile(file){
   showParse("Opening "+name+"…", "Extracting text locally", {kind, name:file.name, size:file.size});
   try{
     if(kind==="pdf"){
-      const {tokens,units,pages,blocks}=await parsePDF(file, setParse);
+      const {tokens,units,pages,blocks,nav}=await parsePDF(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key,blocks);
+      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key,blocks,nav);
       persist(key,{kind:"pdf",blob:file,name:file.name});
     } else {
-      const {tokens,units,chapters,blocks}=await parseEPUB(file, setParse);
+      const {tokens,units,chapters,blocks,nav}=await parseEPUB(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key,blocks);
+      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key,blocks,nav);
       persist(key,{kind:"epub",blob:file,name:file.name});
     }
   }catch(err){

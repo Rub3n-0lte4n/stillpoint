@@ -36,7 +36,7 @@ export function chapterItems(units, index){
   if(!Array.isArray(units) || units.length < 2) return [];
   let cur = 0;
   for(let k=0;k<units.length;k++){ if(units[k].start <= index) cur = k; }
-  return units.map((u,k)=>({ start:u.start, title:u.title, current:k===cur }));
+  return units.map((u,k)=>({ start:u.start, title:u.title, depth:u.depth||0, current:k===cur }));
 }
 
 /* ---------------- sentence boundaries + pacing (Phase 3) ---------------- */

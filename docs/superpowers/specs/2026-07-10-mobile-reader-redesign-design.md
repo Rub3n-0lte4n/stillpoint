@@ -103,3 +103,23 @@ removed — nothing tall lives in the dock anymore.
 - Desktop dock layout changes beyond removing `figIndexToggle` and `Navigate`.
 - Landing page. Streak feature (separate approved spec, on hold).
 - Search within the book.
+
+## Amendment (2026-07-11): declared table of contents
+
+The panel initially listed reading units (spine files with guessed headings for
+EPUB, "Page N" for PDF), which rarely matches the book's own contents. Now the
+parsers extract the **declared** ToC the way Apple Books does:
+
+- **EPUB:** the EPUB3 nav document (`properties="nav"`, `epub:type="toc"`),
+  falling back to the EPUB2 NCX. Entry hrefs resolve to token offsets via each
+  section's start plus fragment anchors collected during the section walk
+  (`walkSection` now also returns `sAnchors`: element id → token offset).
+- **PDF:** the outline (bookmarks) via `pdf.getOutline()`, destinations resolved
+  to page starts.
+
+Parsers return an extra `nav: [{title, start, depth}] | null`; `S.nav` feeds the
+Contents panel when present (depth ≤ 2 rendered as indented rows), while `units`
+remain the reading grid for blocks, appendix toasts, and progress. Books that
+declare no ToC fall back to the old unit list. Consecutive entries resolving to
+the same offset collapse. Tests: `test/nav.test.mjs` (EPUB3 nav + fragments,
+NCX fallback, no-ToC fallback). Cache v31.
