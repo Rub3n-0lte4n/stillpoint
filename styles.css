@@ -28,6 +28,7 @@
 
     /* ---- type · modular scale + locked line-heights ---- */
     --font-display:"Archivo",system-ui,sans-serif;  /* display voice — set wide via font-stretch */
+    --stage-scale:1;   /* reading type multiplier — stepped up on large displays below */
     --fs-2xs:11px; --fs-xs:12px; --fs-sm:13.5px; --fs-base:15px; --fs-md:17px;
     --fs-lg:21px; --fs-xl:27px; --fs-2xl:34px;
     --lh-display:1.05; --lh-body:1.6; --lh-ui:1.4;
@@ -353,7 +354,7 @@
   /* ---------- Reader ---------- */
   .reader{display:none;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;}
   .reader.show{display:flex;}
-  .reader > .wrap{min-height:0;}   /* let the stage column shrink so the dock never overlaps it */
+  .reader > .wrap{min-height:0;max-width:min(1560px,96vw);}   /* the reader spreads out on big displays; let the stage column shrink so the dock never overlaps it */
 
   .reader-top{position:relative;display:flex;align-items:center;justify-content:space-between;padding:max(22px, calc(env(safe-area-inset-top) + 8px)) 0 4px;gap:16px;}
   .doc-title{display:flex;flex-direction:column;min-width:0;}
@@ -365,7 +366,7 @@
      (with the dock expanded) instead of overflowing into the controls */
   .stage-shell{flex:1;min-height:0;display:flex;align-items:stretch;justify-content:center;padding:20px 0;position:relative;}
   .stage{
-    width:100%;max-width:880px;border-radius:var(--r-lg);position:relative;
+    width:100%;max-width:min(1360px,100%);border-radius:var(--r-lg);position:relative;
     touch-action:none;   /* the stage owns its gestures: drag=speed, swipe=sentence, pinch=size */
     background:
       radial-gradient(120% 90% at 50% 0%, rgba(197,163,255,0.07), transparent 55%),
@@ -393,7 +394,7 @@
     position:absolute;top:50%;left:0;white-space:nowrap;
     transform:translate(0,-50%);will-change:transform;
     font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
-    font-size:min(var(--read-size,62px),13vw);line-height:1;letter-spacing:.5px;
+    font-size:min(calc(var(--read-size,62px) * var(--stage-scale,1)),13vw);line-height:1;letter-spacing:.5px;
   }
   .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.34;}  /* no transition — instant word swap in every mode */
   .stage .ribbon.playing .rw{opacity:.14;}          /* dim further while reading — less pull on the eye */
@@ -406,9 +407,16 @@
   .stage .guide.bot{bottom:46px;height:24px;background:linear-gradient(rgba(255,206,92,0),var(--focus));}
   .stage .baseline{position:absolute;left:10%;right:10%;top:50%;height:1px;opacity:.7;background:linear-gradient(90deg,transparent,var(--hair-strong) 50%,transparent);}
 
+  /* large displays: the stage spreads via the wrap; step the reading type up
+     with it so the focal word doesn't shrink into a big screen. The S/M/L/XL
+     choice stays meaningful — the scale multiplies it. */
+  @media (min-width:1600px){ :root{--stage-scale:1.15;} }
+  @media (min-width:1920px){ :root{--stage-scale:1.3;} }
+  @media (min-width:2400px){ :root{--stage-scale:1.5;} }
+
   .word{
     font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
-    font-size:min(var(--read-size,62px), 13vw);line-height:1;
+    font-size:min(calc(var(--read-size,62px) * var(--stage-scale,1)), 13vw);line-height:1;
     display:grid;grid-template-columns:1fr auto 1fr;align-items:baseline;
     width:100%;max-width:760px;letter-spacing:.5px;
   }
@@ -422,11 +430,11 @@
   .word.plain .all{text-align:center;color:var(--ink);}
   .word .piv.off{color:var(--ink);text-shadow:none;}
 
-  .stage .resting{color:var(--ink-soft);font-family:var(--font-display);font-stretch:118%;font-style:italic;font-weight:300;font-size:26px;letter-spacing:.2px;text-align:center;animation:restBreathe 4s ease-in-out infinite;}
+  .stage .resting{color:var(--ink-soft);font-family:var(--font-display);font-stretch:118%;font-style:italic;font-weight:300;font-size:calc(26px * var(--stage-scale,1));letter-spacing:.2px;text-align:center;animation:restBreathe 4s ease-in-out infinite;}
   @keyframes restBreathe{0%,100%{opacity:.72}50%{opacity:1}}
 
   /* edge-tap feedback: a chevron ghosts in where the tap landed, then dissolves */
-  .stage .zone-flash{position:absolute;top:50%;transform:translateY(-50%);font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:44px;line-height:1;color:var(--amethyst);opacity:0;pointer-events:none;}
+  .stage .zone-flash{position:absolute;top:50%;transform:translateY(-50%);font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:calc(44px * var(--stage-scale,1));line-height:1;color:var(--amethyst);opacity:0;pointer-events:none;}
   /* live wpm ghost while dragging speed on the stage */
   .stage .speed-ghost{
     position:absolute;left:50%;top:20%;transform:translateX(-50%) scale(.96);
