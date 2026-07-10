@@ -7,6 +7,7 @@ import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHand
 import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exportMarkdown } from "./highlights.js";
 import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js";
 import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
+import { stageGestures } from "./gestures.js";
 
 const BASE_TITLE = document.title;   // restored when leaving the reader
 
@@ -1324,7 +1325,33 @@ function init(){
     el.classList.remove("l","r","on"); void el.offsetWidth;   // restart the animation
     el.classList.add(dir<0?"l":"r","on");
   };
+  // the stage is a multi-gesture surface: vertical drag = speed (with a ghost
+  // readout), horizontal swipe = sentence step, pinch = text size. Movement
+  // under the slop stays a plain tap, handled by the click listener below.
+  const SIZES=[44,62,82,104];
+  let ghostTimer=null;
+  const speedGhost=(v,phase)=>{
+    const g=$("speedGhost");
+    $("sgVal").textContent=v;
+    if(v!==S.wpm){ setWpm(v); Haptics.trigger("light"); }
+    clearTimeout(ghostTimer);
+    if(phase==="move") g.classList.add("on");
+    else ghostTimer=setTimeout(()=>g.classList.remove("on"), 400);
+  };
+  const gest = stageGestures($("stage"), {
+    getWpm:()=>S.wpm,
+    onSpeed:speedGhost,
+    getSizeIndex:()=>Math.max(0, SIZES.indexOf(S.size)),
+    setSizeIndex:(i)=>{ if(SIZES[i]!==S.size){ setSize(SIZES[i]); Haptics.trigger("light"); } },
+    onSwipe:(dir)=>{
+      if(S.cardOpen) return;
+      if(!$("resting").classList.contains("hidden") || !S.tokens.length) return;
+      if(dir>0){ backSentence(); zoneFlash(-1); } else { fwdSentence(); zoneFlash(1); }
+      Haptics.trigger("light");
+    },
+  });
   $("stage").addEventListener("click",(e)=>{
+    if(gest.consumed()) return;   // a drag/swipe/pinch owns this interaction
     if(S.cardOpen){ resumeFromCard(); return; }
     Haptics.trigger("light");
     const started = $("resting").classList.contains("hidden");

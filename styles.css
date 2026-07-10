@@ -366,6 +366,7 @@
   .stage-shell{flex:1;min-height:0;display:flex;align-items:stretch;justify-content:center;padding:20px 0;position:relative;}
   .stage{
     width:100%;max-width:880px;border-radius:var(--r-lg);position:relative;
+    touch-action:none;   /* the stage owns its gestures: drag=speed, swipe=sentence, pinch=size */
     background:
       radial-gradient(120% 90% at 50% 0%, rgba(197,163,255,0.07), transparent 55%),
       radial-gradient(760px 320px at 50% 52%, rgba(36,23,54,0.78), rgba(11,7,19,0.62));
@@ -426,6 +427,15 @@
 
   /* edge-tap feedback: a chevron ghosts in where the tap landed, then dissolves */
   .stage .zone-flash{position:absolute;top:50%;transform:translateY(-50%);font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:44px;line-height:1;color:var(--amethyst);opacity:0;pointer-events:none;}
+  /* live wpm ghost while dragging speed on the stage */
+  .stage .speed-ghost{
+    position:absolute;left:50%;top:20%;transform:translateX(-50%) scale(.96);
+    display:flex;align-items:baseline;gap:8px;pointer-events:none;
+    opacity:0;transition:opacity var(--t) var(--ease-out), transform var(--t) var(--ease-out);
+  }
+  .stage .speed-ghost.on{opacity:1;transform:translateX(-50%) scale(1);}
+  .stage .speed-ghost b{font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:36px;color:var(--gold);font-variant-numeric:tabular-nums;}
+  .stage .speed-ghost span{font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:var(--ink-mute);}
   .stage .zone-flash.l{left:16px;} .stage .zone-flash.r{right:16px;}
   .stage .zone-flash.on{animation:zoneFlash .5s var(--ease-out);}
   @keyframes zoneFlash{from{opacity:.9}to{opacity:0}}
