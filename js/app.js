@@ -6,7 +6,9 @@ import { Store } from "./store.js";
 import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
 import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exportMarkdown } from "./highlights.js";
 import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js";
-import { Streak, GOAL_STEP } from "./streak.js";
+import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
+
+const BASE_TITLE = document.title;   // restored when leaving the reader
 
 /* ---------------- state ---------------- */
 const S = {
@@ -491,6 +493,21 @@ function closeToc(){
   if(t.contains(document.activeElement) || document.activeElement===document.body)
     $("tocToggle").focus({preventScroll:true});
 }
+// Press-and-hold on a stepper repeats after a beat — one tap, one step; a hold
+// ramps. Replaces click wiring entirely (no double-fire); Enter/Space step once
+// per press, and holding Enter repeats via native key auto-repeat.
+function holdRepeat(btn, fn){
+  let t=null, iv=null;
+  const stop=()=>{ clearTimeout(t); clearInterval(iv); t=iv=null; };
+  btn.addEventListener("pointerdown",()=>{
+    fn();
+    t=setTimeout(()=>{ iv=setInterval(()=>{ if(btn.disabled){ stop(); return; } fn(); },110); },450);
+  });
+  ["pointerup","pointerleave","pointercancel"].forEach(ev=>btn.addEventListener(ev,stop));
+  window.addEventListener("blur",stop);
+  btn.addEventListener("keydown",(e)=>{ if(e.code==="Enter"||e.code==="Space"){ e.preventDefault(); fn(); } });
+}
+
 // Swipe-down on a sheet's grabber dismisses it (touch only; the grabber is
 // display:none on desktop, so these listeners never fire there).
 function sheetSwipe(sheet, onClose){
@@ -663,6 +680,7 @@ function renderStreak(){
   best.classList.toggle("hidden", !(st.best>st.current));
   best.textContent = "best "+st.best;
   $("goalVal").textContent = st.goalMin+" min a day";
+  $("goalDown").disabled = st.goalMin<=GOAL_MIN; $("goalUp").disabled = st.goalMin>=GOAL_MAX;
   const fill=$("streakRingFill");
   fill.style.strokeDasharray = RING_C;
   fill.style.strokeDashoffset = RING_C * (1 - Math.min(1, st.todaySec/(st.goalMin*60)));
@@ -760,7 +778,9 @@ function openReader(tokens, units, title, meta, key, blocks, nav){
   updateMarkBtn();
 
   $("docTitle").textContent=title;
+  $("docTitle").title=title;             // full name on hover — the display ellipsizes
   $("docMeta").textContent=meta;
+  document.title = title + " · Stillpoint";
   S.curUnit=0;
   $("tocToggle").classList.toggle("hidden", (S.nav||S.units).length<2 && S.blocks.length===0);
 
@@ -821,6 +841,7 @@ function showLibrary(){
   $("done").classList.remove("show");
   $("reader").classList.remove("show");
   $("landing").style.display="";
+  document.title = BASE_TITLE;
   renderLibrary(); renderStreak();
   $("dropzone").focus({preventScroll:true});
 }
@@ -1061,6 +1082,7 @@ function setMode(m){
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
 function setWpm(v){
   S.wpm=v; $("wpmVal").textContent=v; $("wpm").value=v;
+  $("wpmDown").disabled = v<=150; $("wpmUp").disabled = v>=800;
   let label="Custom", best=1e9;
   PRESETS.forEach(([w,n])=>{ const d=Math.abs(w-v); if(d<best && d<=40){best=d;label=n;} });
   $("presetLabel").textContent=label;
@@ -1342,8 +1364,9 @@ function init(){
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render();});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
   $("wpm").oninput=e=>setWpm(+e.target.value);
-  $("wpmDown").onclick=()=>{ setWpm(Math.max(150,S.wpm-25)); Haptics.trigger("light"); };
-  $("wpmUp").onclick =()=>{ setWpm(Math.min(800,S.wpm+25)); Haptics.trigger("light"); };
+  const stepWpm=(d)=>()=>{ setWpm(Math.min(800,Math.max(150,S.wpm+d))); Haptics.trigger("light"); };
+  holdRepeat($("wpmDown"), stepWpm(-25));
+  holdRepeat($("wpmUp"),  stepWpm(25));
 
   // "Reading settings" disclosure for the secondary controls
   $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
@@ -1367,8 +1390,9 @@ function init(){
   placeModeCtrl();
 
   // daily goal stepper on the streak strip
-  $("goalDown").onclick=()=>{ Streak.setGoal(Streak.getState().goalMin-GOAL_STEP); renderStreak(); Haptics.trigger("light"); };
-  $("goalUp").onclick =()=>{ Streak.setGoal(Streak.getState().goalMin+GOAL_STEP); renderStreak(); Haptics.trigger("light"); };
+  const stepGoal=(d)=>()=>{ Streak.setGoal(Streak.getState().goalMin+d); renderStreak(); Haptics.trigger("light"); };
+  holdRepeat($("goalDown"), stepGoal(-GOAL_STEP));
+  holdRepeat($("goalUp"),  stepGoal(GOAL_STEP));
   // tap the card chrome (not its body/buttons) to resume
   $("blockCard").addEventListener("click",e=>{ if(e.target.id==="blockCard" || (e.target.classList&&e.target.classList.contains("bc-head"))) resumeFromCard(); });
   // block presentation mode: global segment + per-type overrides

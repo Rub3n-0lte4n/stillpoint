@@ -478,6 +478,7 @@
   }
   .wpm-step:hover{color:#fff;border-color:var(--amethyst);}
   .wpm-step:active{transform:scale(.92);}
+  .wpm-step:disabled{opacity:.35;cursor:default;}   /* at the range edge — nothing left to step */
   input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;background:rgba(255,255,255,0.12);width:140px;outline:none;}
   input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;box-shadow:0 0 0 4px rgba(230,197,135,0.22);}
   input[type=range]::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;background:var(--gold);cursor:pointer;}
