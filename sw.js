@@ -3,7 +3,7 @@
    runtime. Books are stored locally in IndexedDB (see js/store.js), so once you've
    opened the app online, both it and your library work with no connection.
    Bump CACHE_VERSION whenever shell files change so clients pick up the update. */
-const CACHE_VERSION = "stillpoint-v28";
+const CACHE_VERSION = "stillpoint-v29";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
 // All paths are relative to this file (served at /stillpoint/sw.js).
@@ -33,7 +33,9 @@ const FONT_HOSTS = ["fonts.googleapis.com", "fonts.gstatic.com"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_VERSION).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
+    // cache:"reload" bypasses the browser's HTTP cache at install, so a new shell
+    // version can never be assembled from mixed-age files (fresh HTML, stale JS)
+    caches.open(CACHE_VERSION).then((cache) => cache.addAll(SHELL.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting())
   );
 });
 

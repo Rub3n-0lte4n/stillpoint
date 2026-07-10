@@ -28,6 +28,17 @@ export function esc(s){
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
 }
 
+/* ---------------- contents (top-bar navigation) ---------------- */
+// Rows for the Contents panel. `units` come from the parser ({start, title});
+// `index` is the current token position. Exactly one row is current: the last
+// unit whose start we have reached (mirrors the old select's sync rule).
+export function chapterItems(units, index){
+  if(!Array.isArray(units) || units.length < 2) return [];
+  let cur = 0;
+  for(let k=0;k<units.length;k++){ if(units[k].start <= index) cur = k; }
+  return units.map((u,k)=>({ start:u.start, title:u.title, current:k===cur }));
+}
+
 /* ---------------- sentence boundaries + pacing (Phase 3) ---------------- */
 // A sentence starts at index 0 or after any token whose `end` flag is set.
 export function sentenceStart(tokens, i){ let s=Math.min(i, tokens.length-1); while(s>0 && !tokens[s-1].end) s--; return Math.max(0,s); }

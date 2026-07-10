@@ -214,9 +214,25 @@
         <div class="mark"></div>
         <div><h1 style="font-size:19px">Still<em>point</em></h1></div>
       </div>
-      <div class="doc-title" style="text-align:right;align-items:flex-end;">
-        <div class="t" id="docTitle">Untitled</div>
-        <div class="meta" id="docMeta">—</div>
+      <div class="top-right">
+        <div class="doc-title" style="text-align:right;align-items:flex-end;">
+          <div class="t" id="docTitle">Untitled</div>
+          <div class="meta" id="docMeta">—</div>
+        </div>
+        <button type="button" class="toc-toggle" id="tocToggle" aria-label="Contents" aria-expanded="false" aria-controls="toc" title="Contents">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        </button>
+      </div>
+
+      <div class="toc-scrim" id="tocScrim" hidden></div>
+      <div class="toc" id="toc" role="dialog" aria-modal="true" aria-label="Contents" inert>
+        <div class="sheet-grab" aria-hidden="true"></div>
+        <div class="toc-head">
+          <h3>Contents</h3>
+          <button type="button" class="fi-x" id="tocClose" aria-label="Close">✕</button>
+        </div>
+        <div class="toc-list" id="tocList"></div>
+        <button type="button" class="toc-figs hidden" id="tocFigs">Figures &amp; tables</button>
       </div>
     </div>
 
@@ -277,7 +293,7 @@
       </div>
 
       <div class="controls primary">
-        <div class="ctrl">
+        <div class="ctrl" id="modeCtrl">
           <label>Mode</label>
           <div class="seg" id="modeSeg">
             <button data-mode="orp" class="active" title="One word at a time">ORP</button>
@@ -301,12 +317,16 @@
           <span>Reading settings</span>
           <svg class="st-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
         </button>
-
-        <button type="button" class="figindex-toggle hidden" id="figIndexToggle">Figures &amp; Tables</button>
       </div>
 
+      <div class="sheet-scrim" id="sheetScrim" hidden></div>
       <div class="more-wrap" id="moreWrap" inert>
         <div class="controls more" id="moreControls">
+          <div class="sheet-head">
+            <div class="sheet-grab" aria-hidden="true"></div>
+            <span class="sheet-title">Reading settings</span>
+            <button type="button" class="sheet-done" id="sheetDone">Done</button>
+          </div>
           <div class="ctrl" id="chunkCtrl">
             <label>Chunk</label>
             <div class="seg" id="chunkSeg">
@@ -340,11 +360,6 @@
           <div class="ctrl">
             <label>Theme</label>
             <div class="seg" id="themeSeg"></div>
-          </div>
-
-          <div class="ctrl">
-            <label>Navigate</label>
-            <select class="nav-sel" id="navSel"></select>
           </div>
 
           <div class="ctrl hidden" id="blockModeCtrl">

@@ -1,5 +1,5 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
-import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd } from "./text.js";
+import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems } from "./text.js";
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
@@ -369,7 +369,8 @@ function collectBlock(block){
   if(S.shownBlocks.has(block.id)) return;
   S.shownBlocks.add(block.id);
   S.collected.push(block);
-  $("figIndexToggle").classList.remove("hidden");
+  $("tocFigs").classList.remove("hidden");
+  $("tocToggle").classList.remove("hidden");
   renderFigIndex();
 }
 
@@ -435,6 +436,55 @@ function renderFigIndex(){
 }
 function openFigIndex(){ renderFigIndex(); $("figIndex").classList.remove("hidden"); $("fiClose").focus({preventScroll:true}); }
 function closeFigIndex(){ $("figIndex").classList.add("hidden"); }
+
+/* ---------------- contents panel (top-bar navigation) ---------------- */
+// One element, two presentations: bottom sheet on phones, anchored popover on
+// desktop (CSS decides). Opening while playing pauses — an overlay covering the
+// word stream is a deliberate interruption.
+function renderToc(){
+  const list=$("tocList"); list.innerHTML="";
+  chapterItems(S.units, S.index).forEach(it=>{
+    const b=document.createElement("button");
+    b.type="button"; b.className="toc-item"+(it.current?" current":"");
+    b.textContent=it.title;
+    if(it.current) b.setAttribute("aria-current","true");
+    b.onclick=()=>{ jumpTo(it.start); closeToc(); };
+    list.appendChild(b);
+  });
+}
+function tocOpen(){ return !$("toc").hasAttribute("inert"); }
+function openToc(){
+  if(S.playing) pause();
+  renderToc();
+  $("tocScrim").hidden=false;
+  const t=$("toc"); t.removeAttribute("inert"); t.classList.add("show");
+  $("tocToggle").setAttribute("aria-expanded","true");
+  const cur=t.querySelector(".toc-item.current");
+  if(cur) cur.scrollIntoView({block:"center"});
+  (cur || t.querySelector(".toc-item") || $("tocClose")).focus({preventScroll:true});
+}
+function closeToc(){
+  const t=$("toc"); t.classList.remove("show"); t.setAttribute("inert","");
+  $("tocScrim").hidden=true;
+  $("tocToggle").setAttribute("aria-expanded","false");
+  if(t.contains(document.activeElement) || document.activeElement===document.body)
+    $("tocToggle").focus({preventScroll:true});
+}
+// Swipe-down on a sheet's grabber dismisses it (touch only; the grabber is
+// display:none on desktop, so these listeners never fire there).
+function sheetSwipe(sheet, onClose){
+  const grab=sheet.querySelector(".sheet-grab"); if(!grab) return;
+  let y0=null;
+  grab.addEventListener("touchstart",e=>{ y0=e.touches[0].clientY; sheet.style.transition="none"; },{passive:true});
+  grab.addEventListener("touchmove",e=>{ if(y0==null) return; const dy=Math.max(0,e.touches[0].clientY-y0); sheet.style.transform=`translateY(${dy}px)`; },{passive:true});
+  grab.addEventListener("touchend",e=>{
+    if(y0==null) return;
+    const dy=e.changedTouches[0].clientY-y0;
+    sheet.style.transition=""; sheet.style.transform="";
+    if(dy>70) onClose();
+    y0=null;
+  });
+}
 
 /* settings: global mode + per-kind overrides */
 function syncBlockModeUI(){
@@ -531,7 +581,8 @@ function updateProgress(){
   $("tLeft").textContent = "-"+fmt((total-S.index)/S.wpm*60);
   if(S.units.length>1){
     let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=S.index) u=k; }
-    if($("navSel").selectedIndex!==u) $("navSel").selectedIndex=u;
+    if(u!==S.curUnit && !$("toc").hasAttribute("inert")) renderToc();
+    S.curUnit=u;
     // Phase 2: crossing into a new unit surfaces the just-finished chapter's appendix
     // (collected figures/tables) as a non-blocking, dismissible affordance.
     if(u !== S.lastUnit){
@@ -643,7 +694,7 @@ function openReader(tokens, units, title, meta, key, blocks){
   hideBlockUI();
   S.blockMode = defaultBlockMode();
   S.dismissed = new Set(S.blockMode.dismissed);
-  $("figIndexToggle").classList.add("hidden");
+  $("tocFigs").classList.toggle("hidden", S.blocks.length===0);
   $("blockModeCtrl").classList.toggle("hidden", S.blocks.length===0);
   if(S.blocks.length){
     Store.getBlockMode(key).then(v=>{
@@ -662,9 +713,8 @@ function openReader(tokens, units, title, meta, key, blocks){
 
   $("docTitle").textContent=title;
   $("docMeta").textContent=meta;
-  const sel=$("navSel"); sel.innerHTML="";
-  S.units.forEach(u=>{ const o=document.createElement("option"); o.value=u.start; o.textContent=u.title; sel.appendChild(o); });
-  sel.onchange=()=>jumpTo(parseInt(sel.value,10));
+  S.curUnit=0;
+  $("tocToggle").classList.toggle("hidden", S.units.length<2 && S.blocks.length===0);
 
   $("landing").style.display="none";
   $("reader").classList.add("show");
@@ -979,13 +1029,43 @@ function applyAids(){
 }
 // Progressive disclosure: secondary controls collapse behind "Reading settings".
 // inert keeps the hidden controls out of the tab order while collapsed.
+// Under 680px the same panel presents as a modal bottom sheet (CSS), so it also
+// gets a scrim, pause-on-open, and focus handling.
+const sheetMq = window.matchMedia("(max-width:680px)");
+const isSheet = ()=> sheetMq.matches;
 function setSettingsOpen(open){
   const wrap=$("moreWrap"), tg=$("settingsToggle");
   wrap.classList.toggle("open", open);
   tg.setAttribute("aria-expanded", open?"true":"false");
   if(open) wrap.removeAttribute("inert"); else wrap.setAttribute("inert","");
   settings.moreOpen = open;
+  $("sheetScrim").hidden = !(open && isSheet());
+  if(isSheet()){
+    if(open){ if(S.playing) pause(); $("sheetDone").focus({preventScroll:true}); }
+    else if(wrap.contains(document.activeElement) || document.activeElement===document.body)
+      tg.focus({preventScroll:true});
+  }
 }
+// Mode belongs in the sheet on phones but in the dock row on desktop. The panel
+// is one DOM node, so the control is relocated across the breakpoint — moving a
+// node preserves its listeners, and state never duplicates.
+function placeModeCtrl(){
+  const mode=$("modeCtrl"), wrap=$("moreWrap");
+  if(isSheet()){
+    $("moreControls").querySelector(".sheet-head").after(mode);
+    wrap.setAttribute("role","dialog"); wrap.setAttribute("aria-modal","true"); wrap.setAttribute("aria-label","Reading settings");
+  }else{
+    document.querySelector(".controls.primary").insertBefore(mode, document.querySelector(".ctrl.slider-ctrl"));
+    wrap.removeAttribute("role"); wrap.removeAttribute("aria-modal"); wrap.removeAttribute("aria-label");
+  }
+}
+sheetMq.addEventListener("change",()=>{
+  // crossing into phone width with the panel expanded would flash a surprise
+  // modal — start closed instead
+  if(isSheet() && $("moreWrap").classList.contains("open")) setSettingsOpen(false);
+  $("sheetScrim").hidden = !(isSheet() && $("moreWrap").classList.contains("open"));
+  placeModeCtrl();
+});
 
 /* ---------------- patron + reading themes ----------------
    Patronage is an honor system: the Stripe receipt carries an unlock code
@@ -1225,7 +1305,17 @@ function init(){
   $("bcDismiss").onclick=()=>{ if(S.currentBlock) dismissBlock(S.currentBlock); };
   $("pvBack").onclick=closePageView;
   $("fiClose").onclick=closeFigIndex;
-  $("figIndexToggle").onclick=openFigIndex;
+
+  // contents panel + settings sheet chrome
+  $("tocToggle").onclick=()=>{ tocOpen() ? closeToc() : openToc(); Haptics.trigger("light"); };
+  $("tocClose").onclick=closeToc;
+  $("tocScrim").onclick=closeToc;
+  $("tocFigs").onclick=()=>{ closeToc(); openFigIndex(); };
+  $("sheetDone").onclick=()=>{ setSettingsOpen(false); Haptics.trigger("light"); };
+  $("sheetScrim").onclick=()=>setSettingsOpen(false);
+  sheetSwipe($("toc"), closeToc);
+  sheetSwipe($("moreWrap"), ()=>setSettingsOpen(false));
+  placeModeCtrl();
   // tap the card chrome (not its body/buttons) to resume
   $("blockCard").addEventListener("click",e=>{ if(e.target.id==="blockCard" || (e.target.classList&&e.target.classList.contains("bc-head"))) resumeFromCard(); });
   // block presentation mode: global segment + per-type overrides
@@ -1291,6 +1381,13 @@ function init(){
   document.addEventListener("keydown",e=>{
     if(!$("reader").classList.contains("show")) return;
     if($("done").classList.contains("show")||$("about").classList.contains("show")||$("review").classList.contains("show")) return;  // a modal owns the keyboard
+    // contents panel / mobile settings sheet owns the keyboard while open
+    const sheetOpen = isSheet() && $("moreWrap").classList.contains("open");
+    if(tocOpen() || sheetOpen){
+      if(e.code==="Escape"){ e.preventDefault(); tocOpen() ? closeToc() : setSettingsOpen(false); return; }
+      if(e.code==="Tab"){ trapTab(tocOpen()?$("toc"):$("moreWrap"), e); return; }
+      return;
+    }
     // Phase 2: an open block card / page view / figures index owns the keyboard
     const fiOpen=!$("figIndex").classList.contains("hidden");
     if(S.cardOpen || fiOpen){
@@ -1328,7 +1425,8 @@ function init(){
     // patron themes survive restarts, but never boot a locked theme into the pitch modal
     if(prefs.theme) applyTheme((isPatron() || !isPatronTheme(prefs.theme)) ? prefs.theme : "midnight");
   }catch(e){}
-  setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(settings.moreOpen);
+  // a persisted-open panel is fine inline on desktop, but a surprise modal on a phone
+  setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(isSheet() ? false : settings.moreOpen);
   buildThemeSeg();
 
   renderLibrary();

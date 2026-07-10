@@ -335,7 +335,7 @@
   .reader.show{display:flex;}
   .reader > .wrap{min-height:0;}   /* let the stage column shrink so the dock never overlaps it */
 
-  .reader-top{display:flex;align-items:center;justify-content:space-between;padding:max(22px, calc(env(safe-area-inset-top) + 8px)) 0 4px;gap:16px;}
+  .reader-top{position:relative;display:flex;align-items:center;justify-content:space-between;padding:max(22px, calc(env(safe-area-inset-top) + 8px)) 0 4px;gap:16px;}
   .doc-title{display:flex;flex-direction:column;min-width:0;}
   .doc-title .t{font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:19px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46ch;}
   .doc-title .meta{font-size:12px;color:var(--ink-mute);letter-spacing:.4px;margin-top:3px;}
@@ -463,11 +463,50 @@
   input[type=range]::-moz-range-thumb{width:16px;height:16px;border:none;border-radius:50%;background:var(--gold);cursor:pointer;}
   .val{font-size:13px;color:var(--gold);font-variant-numeric:tabular-nums;min-width:62px;}
 
-  select.nav-sel{
-    font-family:inherit;font-size:13px;color:var(--ink);background:var(--surface-2);
-    border:1px solid var(--hair);border-radius:999px;padding:8px 14px;cursor:pointer;max-width:220px;
+  /* ---- contents: navigation lives in the top bar, not in settings ---- */
+  .top-right{display:flex;align-items:center;gap:12px;min-width:0;}
+  .toc-toggle{
+    flex:none;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+    color:var(--ink-soft);background:var(--surface);border:1px solid var(--hair);
+    -webkit-backdrop-filter:blur(10px) saturate(1.4);backdrop-filter:blur(10px) saturate(1.4);
+    transition:color var(--t) var(--ease-out), border-color var(--t) var(--ease-out);
   }
-  select.nav-sel:focus{outline:none;border-color:var(--amethyst);}
+  .toc-toggle:hover{color:var(--ink);border-color:var(--hair-strong);}
+  .toc-toggle[aria-expanded="true"]{color:var(--ink);border-color:var(--amethyst);}
+  .toc-toggle svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;}
+  .toc-scrim{position:fixed;inset:0;z-index:44;}   /* desktop: invisible outside-click catcher */
+  .toc{
+    position:absolute;top:calc(100% + 6px);right:0;z-index:45;width:min(340px, 92vw);
+    display:flex;flex-direction:column;
+    background:var(--surface);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);
+    border:1px solid var(--hair-strong);border-radius:var(--r-md);
+    box-shadow:var(--e-3), inset 0 1px 0 rgba(255,255,255,0.06);
+    padding:14px;opacity:0;transform:translateY(-6px);visibility:hidden;
+    transition:opacity var(--t) var(--ease-out), transform var(--t) var(--ease-out), visibility var(--t);
+  }
+  .toc.show{opacity:1;transform:none;visibility:visible;}
+  .toc-head{display:flex;align-items:center;gap:12px;flex:none;padding:2px 4px 10px;}
+  .toc-head h3{font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:18px;}
+  .toc-list{flex:1;min-height:0;overflow-y:auto;max-height:52vh;display:flex;flex-direction:column;gap:2px;}
+  .toc-item{
+    font:inherit;font-size:14px;text-align:left;color:var(--ink-soft);background:none;border:none;
+    border-radius:var(--r-sm);padding:12px;cursor:pointer;flex:none;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .toc-item:hover{background:var(--surface-2);color:var(--ink);}
+  .toc-item.current{color:var(--gold);background:var(--surface-2);}
+  .toc-figs{
+    flex:none;margin-top:8px;font:inherit;font-size:13px;color:var(--ink-soft);text-align:left;
+    background:none;border:none;border-top:1px solid var(--hair-soft);padding:14px 12px 6px;cursor:pointer;
+  }
+  .toc-figs:hover{color:var(--gold);}
+
+  /* bottom-sheet chrome — dormant on desktop, revealed in the ≤680px block */
+  .sheet-grab{display:none;}
+  .sheet-head{display:none;}
+  .sheet-scrim{display:none;}
+  /* [hidden] must beat the mobile display:block override */
+  .sheet-scrim[hidden],.toc-scrim[hidden]{display:none;}
 
   /* progressive disclosure: "Reading settings" toggle + collapsible secondary controls */
   .settings-toggle{
@@ -534,9 +573,9 @@
     }
 
     .transport{gap:18px;margin-bottom:14px;}
-    /* with settings expanded the dock can outgrow a small phone — cap it and let it
-       scroll internally so the transport row is always reachable */
-    .dock{padding:12px 0 calc(14px + env(safe-area-inset-bottom));max-height:calc(100vh - 150px);max-height:calc(100dvh - 150px);overflow-y:auto;}
+    /* slim dock: everything tall now lives in the settings sheet, so the old
+       internal-scroll cap is gone */
+    .dock{padding:12px 0 calc(14px + env(safe-area-inset-bottom));}
     .scrub{gap:10px;margin-bottom:12px;}
     .scrub .time{width:50px;font-size:11px;}
 
@@ -550,9 +589,56 @@
     .ctrl.slider-ctrl .slider-row{width:100%;justify-content:center;}
     input[type=range]{flex:1;width:auto;min-width:80px;max-width:280px;}
     .wpm-step{width:40px;height:40px;}   /* touch-sized steppers */
-    /* 16px so focusing the chapter select never triggers the iOS auto-zoom */
-    select.nav-sel{max-width:200px;padding:11px 14px;font-size:16px;}
+    .settings-toggle{justify-content:center;padding:12px 18px;}
     .kbd-hint{display:none;}                       /* no hardware keyboard on touch */
+
+    /* brand slims to the orb so the top bar holds title + contents at 320px */
+    .reader-top .brand h1{display:none;}
+
+    /* ---- reading settings as a bottom sheet ---- */
+    .sheet-scrim{display:block;position:fixed;inset:0;z-index:71;background:rgba(5,3,8,0.6);
+      -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);}
+    .more-wrap{
+      display:block;position:fixed;left:0;right:0;bottom:0;z-index:72;
+      background:rgba(14,9,24,0.94);-webkit-backdrop-filter:blur(20px) saturate(1.5);backdrop-filter:blur(20px) saturate(1.5);
+      border-top:1px solid var(--hair-strong);border-radius:22px 22px 0 0;
+      box-shadow:0 -24px 60px -20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.07);
+      transform:translateY(103%);visibility:hidden;
+      transition:transform var(--t-slow) var(--ease-out), visibility var(--t-slow);
+    }
+    .more-wrap.open{transform:none;visibility:visible;}
+    .controls.more{
+      overflow-y:auto;max-height:min(76dvh, 560px);border-top:none;
+      display:flex;flex-direction:column;align-items:stretch;gap:20px;
+      padding:12px 20px calc(20px + env(safe-area-inset-bottom));
+      padding-left:max(20px, env(safe-area-inset-left));
+      padding-right:max(20px, env(safe-area-inset-right));
+    }
+    .controls.more .ctrl{width:100%;}
+    .controls.more .seg{width:100%;border-radius:16px;}
+    .controls.more .seg button{flex:1 1 auto;padding:14px 8px;font-size:14px;}
+    .sheet-head{display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;padding:2px 0 0;flex:none;}
+    .sheet-title{font-size:11px;letter-spacing:2.2px;text-transform:uppercase;color:var(--ink-mute);}
+    .sheet-done{position:absolute;right:0;top:8px;font:inherit;font-size:13px;font-weight:600;color:var(--gold);
+      background:none;border:none;padding:10px 4px;cursor:pointer;}
+    .sheet-grab{display:block;position:relative;width:42px;height:4.5px;border-radius:999px;background:rgba(255,255,255,0.22);flex:none;}
+    .sheet-grab::after{content:"";position:absolute;inset:-16px -60px;}   /* swipe hit area */
+
+    /* ---- contents panel as a bottom sheet ---- */
+    .toc-scrim{background:rgba(5,3,8,0.6);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:73;}
+    .toc{
+      position:fixed;left:0;right:0;bottom:0;top:auto;z-index:74;width:auto;
+      border-radius:22px 22px 0 0;border-left:none;border-right:none;border-bottom:none;
+      max-height:76dvh;opacity:1;transform:translateY(103%);
+      padding:12px 20px calc(20px + env(safe-area-inset-bottom));
+      padding-left:max(20px, env(safe-area-inset-left));
+      padding-right:max(20px, env(safe-area-inset-right));
+      transition:transform var(--t-slow) var(--ease-out), visibility var(--t-slow);
+    }
+    .toc.show{transform:none;}
+    .toc .sheet-grab{margin:2px auto 10px;}
+    .toc-list{max-height:none;}
+    .toc-item{padding:14px 12px;font-size:15px;white-space:normal;}
   }
 
   /* very narrow phones: the header can't seat the brand, badge and support pill */
@@ -749,9 +835,6 @@
   .fi-cap{color:var(--ink-soft);}
   .fi-empty{color:var(--ink-mute);text-align:center;padding:24px 0;}
   /* dock additions */
-  .figindex-toggle{font:inherit;font-size:13px;color:var(--ink-soft);background:var(--surface);
-    border:1px solid var(--hair);border-radius:999px;padding:8px 16px;cursor:pointer;}
-  .figindex-toggle:hover{color:var(--ink);border-color:var(--amethyst);}
   #blockModeCtrl .linklike{margin-top:8px;font-size:12.5px;}
   .bmg{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
   .bmg-row{display:flex;align-items:center;gap:10px;}
