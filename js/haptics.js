@@ -5,7 +5,8 @@
 // plays that tick for a control it considers rendered, so the switch is parked
 // offscreen at natural size — never opacity:0 / display:none / pointer-events:none —
 // and only while the page holds user activation (a real tap or shortly after).
-const patterns = { light:[12], success:[35,55,35], nudge:[55,35,18], error:[28,40,28,40,28], buzz:[200] };
+// The presets the app actually uses (a subset of web-haptics' vocabulary).
+const patterns = { light:[12], success:[35,55,35] };
 const canVibrate = typeof navigator!=="undefined" && typeof navigator.vibrate==="function";
 let iosInput = null;
 

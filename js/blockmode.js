@@ -2,7 +2,7 @@
 // `blockMode` shape: { default:"pause"|"hybrid"|"skip", <kind>:override…, dismissed:[ids] }
 
 // Per-kind defaults (used only if neither an override nor a global default is set).
-export const KIND_DEFAULTS = {
+const KIND_DEFAULTS = {   // internal — modeForKind is the public surface
   table:"pause", equation:"pause", image:"skip", figure:"pause", code:"pause", quote:"pause",
 };
 
