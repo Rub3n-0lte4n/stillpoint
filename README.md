@@ -55,11 +55,11 @@ npm install && npm test
 
 ## Privacy
 
-No accounts, no servers, no tracking. Your documents are read and parsed locally and never uploaded.
+No accounts, no ads, no cookies. Your documents are read and parsed locally and never uploaded. The only telemetry is an anonymous visit count via [GoatCounter](https://www.goatcounter.com) (open source, cookieless, no fingerprinting) — it knows a page was opened, never what you read.
 
 ## Security notes
 
-- **No third-party code at runtime** — pdf.js and JSZip are vendored into the repo and served same-origin, so there is no CDN to compromise. (They were previously loaded from a CDN with Subresource Integrity; vendoring replaced that.)
+- **Vendored parsers, one declared beacon** — pdf.js and JSZip are vendored into the repo and served same-origin, so there is no CDN to compromise for document handling. (They were previously loaded from a CDN with Subresource Integrity; vendoring replaced that.) The only third-party script at runtime is GoatCounter's `count.js`, loaded async for the visit count and allowed explicitly by the CSP.
 - **CVE-2024-4367** — `pdf.js` is invoked with `isEvalSupported:false`, the official mitigation against arbitrary JS execution from a crafted PDF.
 - **Content-Security-Policy** — a `<meta>` CSP restricts scripts and connections to `self` (plus the Google Fonts hosts for styles/fonts). All JavaScript is in external ES modules, so `script-src` does **not** allow `'unsafe-inline'`. (`style-src` still allows it for inline style attributes.)
 - **Untrusted document text** is HTML-escaped before rendering; EPUB content is parsed for text only (no script execution).

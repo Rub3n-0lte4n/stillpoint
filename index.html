@@ -36,12 +36,12 @@
      runtime fetch the service worker uses to cache them for offline). -->
 <meta http-equiv="Content-Security-Policy" content="
   default-src 'self';
-  script-src 'self' blob:;
+  script-src 'self' blob: https://gc.zgo.at;
   worker-src 'self' blob:;
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com;
-  img-src 'self' data: blob:;
-  connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com blob: data:;
+  img-src 'self' data: blob: https://stillpoint.goatcounter.com;
+  connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com blob: data: https://stillpoint.goatcounter.com;
   manifest-src 'self';
   object-src 'none';
   base-uri 'self';
@@ -205,7 +205,7 @@
     </section>
 
     <footer class="site">
-      Your files never leave this device. Everything happens locally, in your browser. · <a href="#" id="aboutLink">How it works</a> · <a href="#" id="guideLink">Reader guide</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
+      Your files never leave this device. The reading happens locally, in your browser. · <a href="#" id="aboutLink">How it works</a> · <a href="#" id="guideLink">Reader guide</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
     </footer>
   </div>
 </div>
@@ -454,7 +454,7 @@
       <div class="about-item"><span class="ai-k">In small phrases</span><span class="ai-v">A few words at once, for a faster, more natural rhythm. <em>RSVP</em></span></div>
       <div class="about-item"><span class="ai-k">A blend of both</span><span class="ai-v">Short phrases with the focal anchor kept in place. <em>Hybrid</em></span></div>
     </div>
-    <p class="about-note">Everything runs inside your browser. Your files are parsed on this device and never uploaded. No account, no server. Nothing about you is tracked.</p>
+    <p class="about-note">Everything runs inside your browser. Your files are parsed on this device and never uploaded. No account, no cookies. The only thing counted is an anonymous visit, and what you read never leaves this device.</p>
     <div class="about-actions">
       <button type="button" class="btn gold" id="aboutTry">Try a sample passage →</button>
     </div>
@@ -557,5 +557,9 @@
 <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <script type="module" src="js/app.js"></script>
+<!-- The one piece of telemetry: an anonymous visit count (GoatCounter — open
+     source, cookieless, no fingerprinting). Skips localhost by itself; loads
+     async and cross-origin, so offline PWA opens are simply not counted. -->
+<script data-goatcounter="https://stillpoint.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>
 </html>
