@@ -1,0 +1,19 @@
+# Stillpoint
+
+> A free, private speed reader that runs entirely in the browser. It streams PDFs, EPUBs and pasted text through a single focal point (RSVP with ORP alignment) so readers finish books instead of re-reading the same paragraph.
+
+Key facts:
+
+- Free, no account. Funded by optional tips and a one-time $29 patron tier that unlocks cosmetic themes only; the reader is identical for everyone.
+- Files are parsed on the device and never uploaded. No server exists. The only telemetry is an anonymous GoatCounter visit count.
+- Formats: PDF (needs a text layer; scanned books without OCR won't work), EPUB (DRM-free), and pasted text.
+- Works offline after the first load; installable PWA on desktop and mobile, with Android share-target support.
+- Tables, images, figures, quotes and code blocks are detected and shown whole instead of being flattened into the word stream.
+- Retention aids: rewind on resume, sentence replay, per-sentence complexity pacing, highlights with Markdown export, and a reading streak with a daily goal.
+- Cross-device sync is a self-contained backup file (books included), shared by AirDrop or any file transfer. No cloud involved.
+- Typical comfortable pace is 400 to 600 words a minute. Stillpoint makes no multiplied-speed claims.
+
+## Links
+
+- [The app](https://stillpointreader.com/)
+- [Source code](https://github.com/Rub3n-0lte4n/stillpoint) (unminified, vanilla JS, no build step)

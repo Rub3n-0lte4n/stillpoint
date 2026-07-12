@@ -1,0 +1,5 @@
+# Stillpoint — everything public, nothing to hide.
+User-agent: *
+Allow: /
+
+Sitemap: https://stillpointreader.com/sitemap.xml

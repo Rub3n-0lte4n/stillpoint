@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="Stillpoint" />
 <link rel="icon" type="image/png" href="favicon.png" />
 <link rel="apple-touch-icon" href="apple-touch-icon.png" />
-<title>Stillpoint · Couture Reader</title>
-<meta name="description" content="Stream PDFs and EPUBs through a single focal point. ORP, RSVP and Hybrid speed-reading, entirely in your browser." />
+<title>Stillpoint · Free speed reader for PDFs and EPUBs</title>
+<meta name="description" content="A free speed reader that runs entirely in your browser. Stream any PDF or EPUB through one still point and finish books again. Nothing you read is uploaded." />
 <link rel="canonical" href="https://stillpointreader.com/" />
 
 <!-- Social preview (Open Graph + Twitter) -->
@@ -56,8 +56,8 @@
 
 <!-- In-browser parsers, vendored locally (pdf.js 3.11.174 · JSZip 3.10.1) so the app
      works fully offline. Same-origin, so SRI/crossorigin are unnecessary. -->
-<script src="js/vendor/pdf.min.js"></script>
-<script src="js/vendor/jszip.min.js"></script>
+<script src="js/vendor/pdf.min.js" defer></script>
+<script src="js/vendor/jszip.min.js" defer></script>
 
 <link rel="stylesheet" href="styles.css" />
 
@@ -66,17 +66,105 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "WebApplication",
-  "name": "Stillpoint",
-  "alternateName": "Stillpoint · Couture Reader",
-  "url": "https://stillpointreader.com/",
-  "description": "A calm, private speed-reader. Stream any PDF or EPUB through a single focal point, entirely in your browser. Files never leave your device.",
-  "applicationCategory": "Productivity",
-  "operatingSystem": "Any (runs in the browser, installable as a PWA)",
-  "browserRequirements": "Requires JavaScript",
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-  "author": { "@type": "Person", "name": "Ruben Oltean" },
-  "image": "https://stillpointreader.com/og.png"
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://stillpointreader.com/#website",
+      "url": "https://stillpointreader.com/",
+      "name": "Stillpoint",
+      "alternateName": "Stillpoint Reader",
+      "inLanguage": "en"
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://stillpointreader.com/#app",
+      "name": "Stillpoint",
+      "alternateName": "Stillpoint · Couture Reader",
+      "url": "https://stillpointreader.com/",
+      "description": "A calm, private speed reader. Stream any PDF or EPUB through a single focal point, entirely in your browser. Files never leave your device.",
+      "applicationCategory": "Productivity",
+      "operatingSystem": "Any (runs in the browser, installable as a PWA)",
+      "browserRequirements": "Requires JavaScript",
+      "isAccessibleForFree": true,
+      "inLanguage": "en",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "Reads PDF and EPUB files locally in the browser",
+        "Focal-point word streaming (RSVP with ORP alignment)",
+        "Works offline as an installable PWA",
+        "Tables, images and figures shown whole, not flattened",
+        "Highlights with Markdown export",
+        "Reading streak with a daily goal",
+        "Cross-device library backup with no server"
+      ],
+      "author": {
+        "@type": "Person",
+        "name": "Ruben Oltean",
+        "sameAs": [
+          "https://github.com/Rub3n-0lte4n"
+        ]
+      },
+      "image": "https://stillpointreader.com/og.png"
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://stillpointreader.com/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Is Stillpoint free?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Stillpoint is free, with no account and no trial period. It is funded by optional tips and a one-time patron tier that unlocks cosmetic themes. The reader itself is identical for everyone."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do my files get uploaded anywhere?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No. Your PDF or EPUB is parsed by your browser, on your device, and it never leaves. There is no server behind Stillpoint. You can verify this in your browser's network tab: beyond fonts and one anonymous visit count, nothing loads."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which formats does Stillpoint support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "PDF and EPUB files, plus any text you paste. PDFs need a text layer, so scanned books won't work yet. EPUBs with DRM can't be opened. Tables, images and figures inside a book are shown as they are, not flattened into the word stream."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does it work offline?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Stillpoint is an installable web app. After your first visit it works with no connection, including opening new books from your device. Add it to your home screen and it behaves like a native reader."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is a focal point reader?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Instead of your eyes chasing lines of text, each word arrives at one fixed point, aligned on the letter your eye naturally locks onto. Reading starts to feel more like listening. The technique is known as RSVP, with ORP alignment."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How fast will I read?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Most readers settle around 400 to 600 words a minute, roughly twice a comfortable book pace. You set the speed, and Stillpoint slows down by itself on dense sentences. There are no 3x promises here; it is built for finishing books, not skimming."
+          }
+        }
+      ]
+    }
+  ]
 }
 </script>
 </head>
@@ -202,6 +290,35 @@
         <span class="pc-amt">$29<em>once, forever</em></span>
       </a>
       <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you. · <button type="button" class="linklike" id="patronCodeLink">I have a patron code</button></p>
+    </section>
+
+
+    <section class="faq" aria-label="Common questions">
+      <h2>Common questions</h2>
+      <details>
+        <summary>Is Stillpoint free?</summary>
+        <p class="fa">Yes. Stillpoint is free, with no account and no trial period. It is funded by optional tips and a one-time patron tier that unlocks cosmetic themes. The reader itself is identical for everyone.</p>
+      </details>
+      <details>
+        <summary>Do my files get uploaded anywhere?</summary>
+        <p class="fa">No. Your PDF or EPUB is parsed by your browser, on your device, and it never leaves. There is no server behind Stillpoint. You can verify this in your browser's network tab: beyond fonts and one anonymous visit count, nothing loads.</p>
+      </details>
+      <details>
+        <summary>Which formats does Stillpoint support?</summary>
+        <p class="fa">PDF and EPUB files, plus any text you paste. PDFs need a text layer, so scanned books won't work yet. EPUBs with DRM can't be opened. Tables, images and figures inside a book are shown as they are, not flattened into the word stream.</p>
+      </details>
+      <details>
+        <summary>Does it work offline?</summary>
+        <p class="fa">Yes. Stillpoint is an installable web app. After your first visit it works with no connection, including opening new books from your device. Add it to your home screen and it behaves like a native reader.</p>
+      </details>
+      <details>
+        <summary>What is a focal point reader?</summary>
+        <p class="fa">Instead of your eyes chasing lines of text, each word arrives at one fixed point, aligned on the letter your eye naturally locks onto. Reading starts to feel more like listening. The technique is known as RSVP, with ORP alignment.</p>
+      </details>
+      <details>
+        <summary>How fast will I read?</summary>
+        <p class="fa">Most readers settle around 400 to 600 words a minute, roughly twice a comfortable book pace. You set the speed, and Stillpoint slows down by itself on dense sentences. There are no 3x promises here; it is built for finishing books, not skimming.</p>
+      </details>
     </section>
 
     <footer class="site">
