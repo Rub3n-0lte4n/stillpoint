@@ -86,11 +86,6 @@ function maybeNudgeInstall(){
    at speed; dim neighbours sit on either side for context, refreshing in place. */
 let ribbonStart = 0, ribbonLast = -1, ribbonOffset = 0;
 
-function pivotWordIndex(){
-  const n = Math.min(S.chunk, S.tokens.length - S.index);
-  const pos = (S.mode==="orp") ? 0 : Math.floor((Math.max(1,n)-1)/2);
-  return S.index + pos;
-}
 function buildRibbon(){
   const start = Math.max(0, S.index - 4);
   const end = Math.min(S.tokens.length-1, S.index + 14);
@@ -102,21 +97,53 @@ function buildRibbon(){
   }
   const rb=$("ribbon"); rb.innerHTML=html; ribbonStart=start; ribbonLast=end;
 }
-// Snap the ribbon so the pivot word's focal letter sits exactly on the stage centre.
-// Positioning is INSTANT (no slide): the focal word is stationary during its dwell, so
-// it stays readable at speed — your eye locks on the centre instead of tracking motion.
+// Mark the current chunk. ORP anchors the focal word's pivot letter; Hybrid
+// gives EVERY word in the phrase its own amber anchor (landing points for the
+// eye's hops); RSVP stays unaccented. Classes go on before fitRibbon measures,
+// so the bold anchors are part of the measured width.
+function markChunk(){
+  const rb=$("ribbon");
+  rb.querySelectorAll(".rw.on, .rw.pivot").forEach(e=>e.classList.remove("on","pivot"));
+  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
+  for(let k=S.index;k<endChunk;k++){
+    const el=rb.querySelector(`.rw[data-i="${k}"]`);
+    if(!el) continue;
+    el.classList.add("on");
+    if(S.mode==="hybrid") el.classList.add("pivot");
+  }
+  if(S.mode==="orp"){
+    const pw=rb.querySelector(`.rw[data-i="${S.index}"]`);
+    if(pw) pw.classList.add("pivot");
+  }
+}
+// Snap the ribbon into place — INSTANT (no slide), so the text is stationary
+// for its whole dwell and stays readable at speed. ORP puts the focal letter
+// exactly on the stage centre (the word hangs around it; the eye never moves).
+// RSVP and Hybrid show a phrase, so the phrase itself centres as a block —
+// its optical middle on the centre line, never lopsided by word lengths.
 function centerRibbon(){
   const rb=$("ribbon"), stage=$("stage");
-  rb.querySelectorAll(".rw.on, .rw.pivot").forEach(e=>e.classList.remove("on","pivot"));
-  const highlight = (S.mode==="orp" || S.mode==="hybrid");
-  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
-  for(let k=S.index;k<endChunk;k++){ const el=rb.querySelector(`.rw[data-i="${k}"]`); if(el) el.classList.add("on"); }
-  const pwEl = rb.querySelector(`.rw[data-i="${pivotWordIndex()}"]`);
-  if(!pwEl) return;
-  if(highlight) pwEl.classList.add("pivot");
-  const pr = pwEl.querySelector(".rpiv").getBoundingClientRect();
   const sr = stage.getBoundingClientRect();
-  const target = Math.round((ribbonOffset + (sr.left+sr.width/2) - (pr.left+pr.width/2))*100)/100;
+  let anchor;
+  if(S.mode==="orp"){
+    const piv = rb.querySelector(`.rw[data-i="${S.index}"] .rpiv`);
+    if(!piv) return;
+    const pr = piv.getBoundingClientRect();
+    anchor = pr.left + pr.width/2;
+  } else {
+    const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
+    let left=Infinity, right=-Infinity;
+    for(let k=S.index;k<endChunk;k++){
+      const el=rb.querySelector(`.rw[data-i="${k}"]`);
+      if(!el) continue;
+      const r=el.getBoundingClientRect();
+      if(r.left<left) left=r.left;
+      if(r.right>right) right=r.right;
+    }
+    if(right<=left) return;
+    anchor = (left+right)/2;
+  }
+  const target = Math.round((ribbonOffset + (sr.left+sr.width/2) - anchor)*100)/100;
   rb.style.transform = `translate(${target}px, -50%)`;
   ribbonOffset = target;
 }
@@ -152,6 +179,7 @@ function render(){
   rb.classList.toggle("no-ctx", !settings.context);
   rb.classList.toggle("playing", S.playing);
   if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2) buildRibbon();
+  markChunk();
   fitRibbon();
   centerRibbon();
 }
