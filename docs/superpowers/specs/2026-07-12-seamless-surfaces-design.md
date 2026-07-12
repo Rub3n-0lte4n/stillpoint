@@ -121,6 +121,18 @@ on the axis at every viewport; ≤360px tightens gaps/diameters so the row fits
 huge surface, photobombing screenshots) is removed — the resting hint and the
 kbd row already teach the tap. Cache v38.
 
+## Amendment (2026-07-12): keyboard HUD parity
+
+The stage HUD existed only for touch: a vertical drag showed the gold wpm
+ghost, taps and swipes flashed the chevrons — but ↑/↓, ←/→, Shift+←, the dock
+◀ ▶ buttons, the wpm steppers and the slider changed the same state with no
+cue at the focal point (and the dock readout is zen-faded mid-read). Feedback
+now lives with the action, not the input device: `zoneFlash` moved into
+`backSentence`/`fwdSentence`/`back10` (‹ › for steps, ‹‹ for back-10, and only
+when the position truly moved — nothing flashes at the first/last sentence),
+and every interactive speed change routes through `nudgeWpm` → `showSpeedGhost`
+(boot/prefs/import still call `setWpm` silently). Cache v39.
+
 ## Out of scope
 
 Drag-to-reorder the library, sheet snap points (content-height sheets don't

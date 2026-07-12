@@ -298,20 +298,48 @@ function trapTab(container, e){
 }
 
 /* ---------------- navigation ---------------- */
+/* A change answers where your eyes are — the focal point — whatever the input.
+   The dock readouts still update, but they may be zen-faded or simply outside
+   the fovea, so the stage carries its own transient HUD: chevrons for steps,
+   the gold number for speed. */
+function zoneFlash(dir, big){
+  const el=$("zoneFlash"); if(!el) return;
+  el.textContent = dir<0 ? (big?"‹‹":"‹") : (big?"››":"›");
+  el.classList.remove("l","r","on"); void el.offsetWidth;   // restart the animation
+  el.classList.add(dir<0?"l":"r","on");
+}
+let ghostTimer=null;
+function showSpeedGhost(v, holdMs=700){
+  const g=$("speedGhost"); if(!g) return;
+  $("sgVal").textContent=v;
+  g.classList.add("on");
+  clearTimeout(ghostTimer);
+  if(holdMs) ghostTimer=setTimeout(()=>g.classList.remove("on"), holdMs);
+}
+// every interactive speed change routes here; setWpm alone stays silent for
+// boot/prefs/import, which are not answers to a person's keypress
+function nudgeWpm(v){ setWpm(Math.min(800, Math.max(150, v))); showSpeedGhost(S.wpm); }
+
 function jumpTo(i){
   S.index = Math.max(0, Math.min(i, S.tokens.length-1));
   render(); updateProgress(); saveProgress();
 }
+// The chevron only ghosts in when the position truly moved — at the first or
+// last sentence nothing happens, and the stage honestly shows nothing.
 function backSentence(){
+  const was=S.index;
   let i = S.index-1;
   while(i>0 && !S.tokens[i-1].end) i--;
   if(i>=S.index-1){ i=S.index-2; while(i>0 && !S.tokens[i-1].end) i--; }
   jumpTo(Math.max(0,i));
+  if(S.index!==was) zoneFlash(-1);
 }
 function fwdSentence(){
+  const was=S.index;
   let i = S.index;
   while(i<S.tokens.length && !S.tokens[i].end) i++;
   jumpTo(Math.min(S.tokens.length-1, i+1));
+  if(S.index!==was) zoneFlash(1);
 }
 
 /* ---------------- Phase 2: non-linear blocks ----------------
@@ -555,7 +583,7 @@ function isUnitEnd(i){ if(S.units.length<2) return false; for(let k=1;k<S.units.
 function currentUnit(i){ let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=i) u=k; } return u; }
 
 /* rewind / regression — pure index moves */
-function back10(){ jumpTo(S.index - 10); }
+function back10(){ const was=S.index; jumpTo(S.index - 10); if(S.index!==was) zoneFlash(-1, true); }
 function replaySentence(){ const s=sentenceStart(S.tokens, S.index); jumpTo(s); if(!S.playing) play(); }
 
 /* highlights */
@@ -1374,32 +1402,19 @@ function init(){
   $("fwdBtn").onclick=fwdSentence;
   $("homeBtn").onclick=requestHome;
   $("homeBtn").addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); requestHome(); }});
-  // tap the reading area: the middle plays/pauses, the edges step a sentence.
-  // Zones only arm once reading has started, so the first tap always just begins.
-  const zoneFlash=(dir)=>{
-    const el=$("zoneFlash"); if(!el) return;
-    el.textContent = dir<0 ? "‹" : "›";
-    el.classList.remove("l","r","on"); void el.offsetWidth;   // restart the animation
-    el.classList.add(dir<0?"l":"r","on");
-  };
   // the stage is a multi-gesture surface: vertical drag = speed (with a ghost
   // readout), horizontal swipe = sentence step, pinch = text size. Movement
   // under the slop stays a plain tap, handled by the click listener below.
   const SIZES=[44,62,82,104];
-  let ghostTimer=null;
   const speedGhost=(v,phase)=>{
-    const g=$("speedGhost");
-    $("sgVal").textContent=v;
     // haptics stay sparing: one tick when the drag engages, one on hitting a
     // range wall — never per step (battery, and the readout is the feedback)
-    if(phase==="move" && !g.classList.contains("on")) Haptics.trigger("light");
+    if(phase==="move" && !$("speedGhost").classList.contains("on")) Haptics.trigger("light");
     if(v!==S.wpm){
       setWpm(v);
       if(v===150 || v===800) Haptics.trigger("light");
     }
-    clearTimeout(ghostTimer);
-    if(phase==="move") g.classList.add("on");
-    else ghostTimer=setTimeout(()=>g.classList.remove("on"), 400);
+    showSpeedGhost(v, phase==="move" ? 0 : 400);   // held open while the finger drags
   };
   const gest = stageGestures($("stage"), {
     getWpm:()=>S.wpm,
@@ -1409,7 +1424,7 @@ function init(){
     onSwipe:(dir)=>{
       if(S.cardOpen) return;
       if(!$("resting").classList.contains("hidden") || !S.tokens.length) return;
-      if(dir>0){ backSentence(); zoneFlash(-1); } else { fwdSentence(); zoneFlash(1); }
+      dir>0 ? backSentence() : fwdSentence();   // the step flashes its own chevron
       Haptics.trigger("light");
     },
     // hold the word you're hearing to mark its sentence — the stream never stops
@@ -1426,8 +1441,8 @@ function init(){
     if(started && S.tokens.length){
       const r=$("stage").getBoundingClientRect();
       const x=(e.clientX-r.left)/r.width;
-      if(x<0.2){ backSentence(); zoneFlash(-1); return; }
-      if(x>0.8){ fwdSentence(); zoneFlash(1); return; }
+      if(x<0.2){ backSentence(); return; }
+      if(x>0.8){ fwdSentence(); return; }
     }
     toggle();
   });
@@ -1458,9 +1473,9 @@ function init(){
   document.querySelectorAll("#modeSeg button").forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
   document.querySelectorAll("#chunkSeg button").forEach(b=>b.onclick=()=>{S.chunk=+b.dataset.c;setChunkUI(S.chunk); if(!$("ribbon").classList.contains("hidden")) render();});
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.onclick=()=>setSize(+b.dataset.s));
-  $("wpm").oninput=e=>setWpm(+e.target.value);
+  $("wpm").oninput=e=>nudgeWpm(+e.target.value);
   // one tick per press (pointerdown), silent during the hold-repeat ramp
-  const stepWpm=(d)=>()=>setWpm(Math.min(800,Math.max(150,S.wpm+d)));
+  const stepWpm=(d)=>()=>nudgeWpm(S.wpm+d);
   holdRepeat($("wpmDown"), stepWpm(-25));
   holdRepeat($("wpmUp"),  stepWpm(25));
   $("wpmDown").addEventListener("pointerdown",()=>Haptics.trigger("light"));
@@ -1582,8 +1597,8 @@ function init(){
     }
     else if(e.code==="ArrowLeft"){e.preventDefault(); e.shiftKey ? back10() : backSentence();}
     else if(e.code==="ArrowRight"){e.preventDefault();fwdSentence();}
-    else if(e.code==="ArrowUp"){e.preventDefault();setWpm(Math.min(800,S.wpm+25));}
-    else if(e.code==="ArrowDown"){e.preventDefault();setWpm(Math.max(150,S.wpm-25));}
+    else if(e.code==="ArrowUp"){e.preventDefault();nudgeWpm(S.wpm+25);}
+    else if(e.code==="ArrowDown"){e.preventDefault();nudgeWpm(S.wpm-25);}
     else if(e.code==="KeyM"){e.preventDefault(); markCurrent(e.shiftKey);}   // M sentence, Shift+M word
     else if(e.code==="KeyR"){e.preventDefault(); replaySentence();}
     else if(e.code==="Escape"){requestHome();}
