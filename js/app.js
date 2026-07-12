@@ -1527,7 +1527,7 @@ function init(){
   });
 
   // haptics: subtle tap on controls, richer cue on a donation tap
-  document.querySelectorAll("#modeSeg button,#chunkSeg button,#sizeSeg button,#backBtn,#fwdBtn,#playBtn")
+  document.querySelectorAll("#modeSeg button,#chunkSeg button,#sizeSeg button,#replayBtn,#backBtn,#fwdBtn,#playBtn")
     .forEach(b=>b.addEventListener("click",()=>Haptics.trigger("light")));
   document.querySelectorAll(".tier,.support-pill,.footer-support")
     .forEach(a=>a.addEventListener("click",()=>Haptics.trigger("success")));

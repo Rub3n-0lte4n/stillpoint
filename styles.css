@@ -711,6 +711,12 @@
   @media (max-width:420px){
     .patron-chip{display:none;}
   }
+  /* the five-button transport needs a tighter fit at 320–360px (targets stay ≥44px) */
+  @media (max-width:360px){
+    .transport{gap:12px;}
+    .tbtn{width:44px;height:44px;}
+    .tbtn.play{width:62px;height:62px;}
+  }
 
   /* medium-short viewports (e.g. phones with browser toolbars shown): trim the
      stage so it stays readable as it shrinks with the dock expanded */

@@ -257,7 +257,7 @@
     </div>
 
     <div class="stage-shell">
-      <div class="stage" id="stage" title="Tap to play / pause">
+      <div class="stage" id="stage">
         <div class="guide top"></div>
         <div class="baseline"></div>
         <div class="guide bot"></div>
@@ -306,7 +306,9 @@
         <div class="time r" id="tLeft">-0:00</div>
       </div>
 
+      <!-- five controls, symmetric around play, so play sits exactly on the focal axis -->
       <div class="transport">
+        <button type="button" class="tbtn" id="replayBtn" title="Replay sentence (R)" aria-label="Replay this sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg></button>
         <button type="button" class="tbtn" id="backBtn" title="Back a sentence (←)" aria-label="Back a sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 19l-7-7 7-7v4h9v6h-9z"/></svg></button>
         <button type="button" class="tbtn play" id="playBtn" title="Play / pause (space)" aria-label="Play"><svg viewBox="0 0 24 24" id="playIcon" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
         <button type="button" class="tbtn" id="fwdBtn" title="Forward a sentence (→)" aria-label="Forward a sentence"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 5l7 7-7 7v-4H4v-6h9z"/></svg></button>

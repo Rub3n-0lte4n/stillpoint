@@ -109,6 +109,18 @@ fixes the standing a11y gap (rows were unreachable by keyboard):
   containment. No new files beyond this spec; no HTML changes.
 - `CACHE_VERSION` → `stillpoint-v37`.
 
+## Amendment (2026-07-12): the transport centres on the focal axis
+
+The four-button transport (back · play · fwd · mark) was centred as a group,
+which put the play button 35px left of the stage's focal crosshair — mark had
+no counterweight. A Replay-sentence button (↺, the R key's action, whose
+`#replayBtn` wiring already existed in app.js) now sits at the far left:
+replay · back · **play** · fwd · mark. Five controls, symmetric, play exactly
+on the axis at every viewport; ≤360px tightens gaps/diameters so the row fits
+320px with ≥44px targets. The stage's `title` tooltip (a system tooltip on a
+huge surface, photobombing screenshots) is removed — the resting hint and the
+kbd row already teach the tap. Cache v38.
+
 ## Out of scope
 
 Drag-to-reorder the library, sheet snap points (content-height sheets don't
