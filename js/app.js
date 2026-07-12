@@ -7,7 +7,7 @@ import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHand
 import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exportMarkdown } from "./highlights.js";
 import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js";
 import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
-import { stageGestures } from "./gestures.js";
+import { stageGestures, sheetDrag, rowSwipe } from "./gestures.js";
 
 const BASE_TITLE = document.title;   // restored when leaving the reader
 
@@ -509,19 +509,17 @@ function holdRepeat(btn, fn){
   btn.addEventListener("keydown",(e)=>{ if(e.code==="Enter"||e.code==="Space"){ e.preventDefault(); fn(); } });
 }
 
-// Swipe-down on a sheet's grabber dismisses it (touch only; the grabber is
-// display:none on desktop, so these listeners never fire there).
-function sheetSwipe(sheet, onClose){
-  const grab=sheet.querySelector(".sheet-grab"); if(!grab) return;
-  let y0=null;
-  grab.addEventListener("touchstart",e=>{ y0=e.touches[0].clientY; sheet.style.transition="none"; },{passive:true});
-  grab.addEventListener("touchmove",e=>{ if(y0==null) return; const dy=Math.max(0,e.touches[0].clientY-y0); sheet.style.transform=`translateY(${dy}px)`; },{passive:true});
-  grab.addEventListener("touchend",e=>{
-    if(y0==null) return;
-    const dy=e.changedTouches[0].clientY-y0;
-    sheet.style.transition=""; sheet.style.transform="";
-    if(dy>70) onClose();
-    y0=null;
+// A bottom sheet is a physical surface: drag it from anywhere (the internal
+// list still scrolls when it isn't at its top), the scrim lightens as it goes,
+// and release position + velocity decide dismiss vs settle (js/gestures.js).
+function wireSheet(sheet, scrim, onClose){
+  sheetDrag(sheet, {
+    enabled: isSheet,
+    onClose,
+    onProgress:(p)=>{
+      if(p==null){ scrim.style.transition=""; scrim.style.opacity=""; }
+      else { scrim.style.transition="none"; scrim.style.opacity=String(1-p); }
+    },
   });
 }
 
@@ -701,30 +699,65 @@ function saveProgress(){
   lib.unshift({key:S.key,title:S.title,type:S.meta.split(" ")[0]||"TEXT",index:S.index,total:S.tokens.length,ts:Date.now()});
   saveLib(lib);
 }
+let openLibRow=null;   // at most one row rests open on its Remove action
 function renderLibrary(){
   const lib = loadLib();
   const box=$("recent"), list=$("recentList");
   // the backup panel only makes sense once there's a library to move
   $("backup").classList.toggle("hidden", lib.length===0);
+  openLibRow=null;
+  list.innerHTML="";
   if(lib.length===0){ box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
-  list.innerHTML="";
   lib.forEach(item=>{
-    const pct = item.total ? Math.round(item.index/item.total*100) : 0;
+    const pct = item.total ? Math.min(100, Math.round(item.index/item.total*100)) : 0;
+    const finished = item.total && item.index>=item.total;
     // honest finishing nudge: time left at the reader's own pace
     let prog = pct+"%";
-    if(item.total && item.index>=item.total) prog = "Finished";
+    if(finished) prog = "Finished";
     else if(item.total){
       const m = Math.max(1, Math.ceil((item.total-item.index)/S.wpm));
       prog = `${pct}% · ~${m>=120 ? Math.round(m/60)+"h" : m+"m"} left`;
     }
     const el=document.createElement("div"); el.className="recent-item";
-    el.innerHTML=`<span class="ri-type">${esc(item.type||"TEXT")}</span>
-      <span class="ri-name">${esc(item.title)}</span>
-      <span class="ri-prog">${prog}</span>
-      <span class="ri-x" title="Remove">✕</span>`;
-    el.querySelector(".ri-name").onclick=el.querySelector(".ri-type").onclick=el.querySelector(".ri-prog").onclick=()=>openFromStore(item);
-    el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); removeItem(item); };
+    el.innerHTML=`<button type="button" class="ri-del" tabindex="-1" aria-hidden="true">Remove</button>
+      <div class="ri-face">
+        <button type="button" class="ri-open">
+          <span class="ri-type">${esc(item.type||"TEXT")}</span>
+          <span class="ri-name">${esc(item.title)}</span>
+          <span class="ri-prog">${prog}</span>
+        </button>
+        <button type="button" class="ri-x" title="Remove" aria-label="Remove &ldquo;${esc(item.title)}&rdquo;">✕</button>
+        <i class="ri-bar${finished?" full":""}" style="width:${finished?100:pct}%" aria-hidden="true"></i>
+      </div>`;
+    const face=el.querySelector(".ri-face");
+    // deletion choreography: the face slides off, the row folds shut, then the
+    // library updates — same Undo toast and deferred file delete as always
+    let committed=false;
+    const commit=()=>{
+      if(committed) return;
+      committed=true;
+      if(openLibRow===sw) openLibRow=null;
+      face.style.transition=""; face.style.transform="translateX(-105%)";
+      el.style.height=el.offsetHeight+"px";
+      requestAnimationFrame(()=>{ el.classList.add("collapse"); el.style.height="0px"; });
+      setTimeout(()=>removeItem(item), 230);
+    };
+    const sw=rowSwipe(el, face, {
+      onCommit:commit,
+      onZoneTick:()=>Haptics.trigger("light"),   // the finger learns: release here deletes
+      onOpenChange:(open)=>{
+        if(open){ if(openLibRow && openLibRow!==sw) openLibRow.close(); openLibRow=sw; }
+        else if(openLibRow===sw) openLibRow=null;
+      },
+    });
+    el.querySelector(".ri-open").onclick=()=>{
+      if(sw.consumed()) return;                  // the swipe owns this interaction
+      if(sw.isOpen()){ sw.close(); return; }     // tap outside the action closes first
+      openFromStore(item);
+    };
+    el.querySelector(".ri-del").onclick=()=>{ if(!sw.consumed()) commit(); };
+    el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); if(!sw.consumed()) commit(); };
     list.appendChild(el);
   });
 }
@@ -839,6 +872,12 @@ async function openFromStore(item){
 // so keyboard / screen-reader users aren't stranded on the now-hidden reader.
 function showLibrary(){
   pause();
+  // no surface survives the route change — a sheet left open here would greet
+  // the next book already raised
+  hideBlockUI();
+  if(tocOpen()) closeToc();
+  if(isSheet() && $("moreWrap").classList.contains("open")) setSettingsOpen(false);
+  closeReview();
   $("done").classList.remove("show");
   $("reader").classList.remove("show");
   $("landing").style.display="";
@@ -846,10 +885,23 @@ function showLibrary(){
   renderLibrary(); renderStreak();
   $("dropzone").focus({preventScroll:true});
 }
+// Back dismisses the topmost surface first — the platform promise on Android —
+// and only a bare reader exits to the library. Order mirrors the visual stack.
+function closeTopOverlay(){
+  if(tocOpen()){ closeToc(); return true; }
+  if(isSheet() && $("moreWrap").classList.contains("open")){ setSettingsOpen(false); return true; }
+  if(!$("figIndex").classList.contains("hidden")){ closeFigIndex(); return true; }
+  if(!$("pageView").classList.contains("hidden")){ closePageView(); return true; }
+  if(S.cardOpen){ resumeFromCard(); return true; }
+  if($("review").classList.contains("show")){ closeReview(); return true; }
+  return false;
+}
 // Route user-initiated exits through history so the browser/hardware Back button
 // returns to the library instead of leaving the site (popstate → showLibrary).
+// An explicit "home" tap means leave now — it skips the overlay-first rule.
+let homeIntent=false;
 function requestHome(){
-  if(history.state && history.state.sp==="reader") history.back();
+  if(history.state && history.state.sp==="reader"){ homeIntent=true; history.back(); }
   else showLibrary();
 }
 
@@ -1310,7 +1362,12 @@ function init(){
 
   $("doneShare").onclick=shareResult;
   heroDemo();
-  window.addEventListener("popstate",()=>{ if($("reader").classList.contains("show")) showLibrary(); });
+  window.addEventListener("popstate",()=>{
+    if(!$("reader").classList.contains("show")) return;
+    const explicit=homeIntent; homeIntent=false;
+    if(!explicit && closeTopOverlay()){ history.pushState({sp:"reader"}, ""); return; }
+    showLibrary();
+  });
 
   $("playBtn").onclick=toggle;
   $("backBtn").onclick=backSentence;
@@ -1354,6 +1411,11 @@ function init(){
       if(!$("resting").classList.contains("hidden") || !S.tokens.length) return;
       if(dir>0){ backSentence(); zoneFlash(-1); } else { fwdSentence(); zoneFlash(1); }
       Haptics.trigger("light");
+    },
+    // hold the word you're hearing to mark its sentence — the stream never stops
+    onHold:()=>{
+      if(S.cardOpen || !S.tokens.length) return;
+      if($("resting").classList.contains("hidden")) markCurrent(false);
     },
   });
   $("stage").addEventListener("click",(e)=>{
@@ -1421,8 +1483,8 @@ function init(){
   $("tocFigs").onclick=()=>{ closeToc(); openFigIndex(); };
   $("sheetDone").onclick=()=>{ setSettingsOpen(false); Haptics.trigger("light"); };
   $("sheetScrim").onclick=()=>setSettingsOpen(false);
-  sheetSwipe($("toc"), closeToc);
-  sheetSwipe($("moreWrap"), ()=>setSettingsOpen(false));
+  wireSheet($("toc"), $("tocScrim"), closeToc);
+  wireSheet($("moreWrap"), $("sheetScrim"), ()=>setSettingsOpen(false));
   placeModeCtrl();
 
   // daily goal stepper on the streak strip
@@ -1495,7 +1557,7 @@ function init(){
   // keyboard
   document.addEventListener("keydown",e=>{
     if(!$("reader").classList.contains("show")) return;
-    if($("done").classList.contains("show")||$("about").classList.contains("show")||$("review").classList.contains("show")) return;  // a modal owns the keyboard
+    if($("done").classList.contains("show")||$("about").classList.contains("show")||$("review").classList.contains("show")||$("patron").classList.contains("show")) return;  // a modal owns the keyboard
     // contents panel / mobile settings sheet owns the keyboard while open
     const sheetOpen = isSheet() && $("moreWrap").classList.contains("open");
     if(tocOpen() || sheetOpen){
