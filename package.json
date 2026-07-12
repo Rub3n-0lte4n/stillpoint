@@ -8,7 +8,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "node test/phase1.test.mjs && node test/phase2.test.mjs && node test/phase3.test.mjs && node test/patron.test.mjs && node test/toc.test.mjs && node test/streak.test.mjs && node test/nav.test.mjs && node test/gestures.test.mjs"
+    "test": "node test/phase1.test.mjs && node test/phase2.test.mjs && node test/phase3.test.mjs && node test/patron.test.mjs && node test/toc.test.mjs && node test/streak.test.mjs && node test/nav.test.mjs && node test/gestures.test.mjs && node test/hints.test.mjs"
   },
   "repository": {
     "type": "git",

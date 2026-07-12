@@ -101,6 +101,8 @@
     input[type=range]::-webkit-slider-thumb{width:24px;height:24px;}
     input[type=range]::-moz-range-thumb{width:24px;height:24px;}
     .kb-only{display:none;}   /* keyboard hints mean nothing on touch */
+    /* two classes, so this outranks the later .g-row{display:flex} regardless of order */
+    .g-row.kb-only{display:none;}
     .pointer-only{display:none;}
     .touch-only{display:inline;}
   }
@@ -849,6 +851,22 @@
   .about-note{color:var(--ink-mute);font-size:13px;line-height:1.6;}
   .about-actions{margin-top:22px;display:flex;justify-content:flex-end;}
 
+  /* ---------- the guide (complete manual, on the about shell) ---------- */
+  .guide-card{max-width:640px;}
+  .g-sec{margin-top:26px;}
+  .g-sec h4{font-size:11px;letter-spacing:2.2px;text-transform:uppercase;color:var(--gold);margin-bottom:10px;}
+  .g-row{display:flex;gap:16px;padding:9px 0;border-top:1px solid var(--hair-soft);}
+  .g-act{flex:none;width:148px;font-size:13px;color:var(--ink);font-weight:500;}
+  .g-how{flex:1;font-size:13.5px;line-height:1.55;color:var(--ink-soft);}
+  .guide-card kbd, .g-keys kbd{font-family:"Spline Sans";background:rgba(255,255,255,0.06);border:1px solid var(--hair);border-radius:6px;padding:1px 7px;font-size:11.5px;color:var(--ink-soft);margin:0 1px;white-space:nowrap;}
+  .g-keys{display:flex;flex-wrap:wrap;gap:10px 22px;padding-top:4px;}
+  .g-keys span{font-size:12.5px;color:var(--ink-soft);}
+  .guide-open{display:block;margin:2px auto 0;font-size:12.5px;}
+  @media (max-width:560px){
+    .g-row{flex-direction:column;gap:3px;}
+    .g-act{width:auto;}
+  }
+
   /* ---------- toasts ---------- */
   .toasts{
     position:fixed;left:0;right:0;top:calc(18px + env(safe-area-inset-top));z-index:200;
@@ -862,6 +880,9 @@
     animation:toastIn .25s var(--ease-out);
   }
   .toast.err{border-color:rgba(240,166,200,0.5);}
+  /* progressive hints: the tutorial voice gets its own quiet identity */
+  .toast.hint{border-color:rgba(230,197,135,0.4);}
+  .toast.hint .tmsg::before{content:"✦  ";color:var(--gold);}
   .toast .tmsg{flex:1;line-height:1.4;}
   .toast .taction{flex:none;background:none;border:none;color:var(--gold);font:inherit;font-weight:600;cursor:pointer;padding:5px 10px;border-radius:8px;}
   .toast .taction:hover{background:rgba(230,197,135,0.14);}

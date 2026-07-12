@@ -8,6 +8,7 @@ import { toggleRange, serializeHighlights, deserializeHighlights, rangeText, exp
 import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js";
 import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
 import { stageGestures, sheetDrag, rowSwipe } from "./gestures.js";
+import { Hints } from "./hints.js";
 
 const BASE_TITLE = document.title;   // restored when leaving the reader
 
@@ -207,12 +208,6 @@ function play(){
   updateProgress();
   acquireWakeLock();
   armZen();
-  try{
-    if(!localStorage.getItem("fp_hint_zones_v1")){
-      localStorage.setItem("fp_hint_zones_v1","1");
-      toast("Tip: tap the edges of the reading area to step back or ahead a sentence.", { duration:6000 });
-    }
-  }catch(e){}
   if(settings.countdown){
     countdownThenStep();
   } else {
@@ -261,7 +256,20 @@ function pause(){
   $("playBtn").setAttribute("aria-label","Play");
   saveProgress();
 }
-function toggle(){ if(S.cardOpen){ resumeFromCard(); return; } S.playing ? pause() : play(); }
+function toggle(){
+  if(S.cardOpen){ resumeFromCard(); return; }
+  if(S.playing){ pause(); maybeHint("reader"); }   // a deliberate pause is the calm teaching moment
+  else play();
+}
+// Progressive hints, the way games teach: one mechanic at a time, at a pause,
+// never once the reader already performs it (see js/hints.js for the gating).
+function maybeHint(where){
+  if(document.hidden) return;
+  const h = Hints.next({ where, libSize: loadLib().length });
+  if(!h) return;
+  Hints.markShown(h.id);
+  toast(h.text, { duration:7000, hint:true, action:"Guide", onAction:openGuide });
+}
 // Reached the end — show the session summary.
 function finish(){
   pause();
@@ -674,10 +682,10 @@ function updateProgress(){
 }
 
 /* ---------------- toasts (non-blocking, on-brand feedback) ---------------- */
-function toast(msg, {action, onAction, duration=4500, error=false}={}){
+function toast(msg, {action, onAction, duration=4500, error=false, hint=false}={}){
   const wrap=$("toasts");
   const el=document.createElement("div");
-  el.className="toast"+(error?" err":"");
+  el.className="toast"+(error?" err":"")+(hint?" hint":"");
   el.setAttribute("role", error?"alert":"status");   // errors interrupt; status messages wait politely
   const m=document.createElement("span"); m.className="tmsg"; m.textContent=msg; el.appendChild(m);
   let timer;
@@ -772,10 +780,10 @@ function renderLibrary(){
       setTimeout(()=>removeItem(item), 230);
     };
     const sw=rowSwipe(el, face, {
-      onCommit:commit,
+      onCommit:()=>{ Hints.used("rowswipe"); commit(); },
       onZoneTick:()=>Haptics.trigger("light"),   // the finger learns: release here deletes
       onOpenChange:(open)=>{
-        if(open){ if(openLibRow && openLibRow!==sw) openLibRow.close(); openLibRow=sw; }
+        if(open){ Hints.used("rowswipe"); if(openLibRow && openLibRow!==sw) openLibRow.close(); openLibRow=sw; }
         else if(openLibRow===sw) openLibRow=null;
       },
     });
@@ -854,6 +862,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav){
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden"); $("ribbon").classList.add("hidden");
   $("playBtn").focus({preventScroll:true});   // move focus into the reader (route-change focus)
   saveProgress(); // record the entry immediately so the recent library reflects it
+  Hints.readerOpened();
 }
 
 /* ---------------- local file cache (IndexedDB) ---------------- */
@@ -912,6 +921,7 @@ function showLibrary(){
   document.title = BASE_TITLE;
   renderLibrary(); renderStreak();
   $("dropzone").focus({preventScroll:true});
+  maybeHint("landing");
 }
 // Back dismisses the topmost surface first — the platform promise on Android —
 // and only a bare reader exits to the library. Order mirrors the visual stack.
@@ -1262,6 +1272,18 @@ function buildThemeSeg(){
     seg.appendChild(b);
   }
 }
+let guideReturn=null;
+function openGuide(){
+  // opening from the phone settings sheet: lower the sheet first, one surface at a time
+  if(isSheet() && $("moreWrap").classList.contains("open")) setSettingsOpen(false);
+  guideReturn=document.activeElement;
+  $("guide").classList.add("show");
+  $("guideClose").focus({preventScroll:true});
+}
+function closeGuide(){
+  $("guide").classList.remove("show");
+  if(guideReturn && guideReturn.focus) guideReturn.focus({preventScroll:true});
+}
 let patronReturn=null;
 function openPatron(){ patronReturn=document.activeElement; $("patron").classList.add("show"); $("patronCode").focus({preventScroll:true}); }
 function closePatron(){ $("patron").classList.remove("show"); if(patronReturn && patronReturn.focus) patronReturn.focus({preventScroll:true}); }
@@ -1371,11 +1393,17 @@ function init(){
 
   // modal keyboard: Escape dismisses, Tab stays trapped inside the open dialog
   document.addEventListener("keydown",e=>{
-    const aboutOpen=about.classList.contains("show"), doneOpen=$("done").classList.contains("show"), reviewOpen=$("review").classList.contains("show"), patronOpen=$("patron").classList.contains("show");
-    if(!aboutOpen && !doneOpen && !reviewOpen && !patronOpen) return;
-    if(e.key==="Escape"){ e.preventDefault(); patronOpen ? closePatron() : reviewOpen ? closeReview() : (aboutOpen ? closeAbout() : requestHome()); }
-    else if(e.key==="Tab"){ trapTab(patronOpen ? $("patron") : reviewOpen ? $("review") : (aboutOpen ? about : $("done")), e); }
+    const aboutOpen=about.classList.contains("show"), doneOpen=$("done").classList.contains("show"), reviewOpen=$("review").classList.contains("show"), patronOpen=$("patron").classList.contains("show"), guideOpen=$("guide").classList.contains("show");
+    if(!aboutOpen && !doneOpen && !reviewOpen && !patronOpen && !guideOpen) return;
+    if(e.key==="Escape"){ e.preventDefault(); guideOpen ? closeGuide() : patronOpen ? closePatron() : reviewOpen ? closeReview() : (aboutOpen ? closeAbout() : requestHome()); }
+    else if(e.key==="Tab"){ trapTab(guideOpen ? $("guide") : patronOpen ? $("patron") : reviewOpen ? $("review") : (aboutOpen ? about : $("done")), e); }
   });
+
+  // the guide: complete manual, reachable from everywhere the eye might ask
+  $("guideLink").onclick=(e)=>{ e.preventDefault(); openGuide(); };
+  $("settingsGuide").onclick=openGuide;
+  $("guideClose").onclick=closeGuide;
+  $("guide").addEventListener("click",e=>{ if(e.target===$("guide")) closeGuide(); });
 
   // patron: modal, unlock code, badge, themes
   $("patronCodeLink").onclick=openPatron;
@@ -1410,6 +1438,7 @@ function init(){
     // haptics stay sparing: one tick when the drag engages, one on hitting a
     // range wall — never per step (battery, and the readout is the feedback)
     if(phase==="move" && !$("speedGhost").classList.contains("on")) Haptics.trigger("light");
+    if(phase==="move") Hints.used("speeddrag");
     if(v!==S.wpm){
       setWpm(v);
       if(v===150 || v===800) Haptics.trigger("light");
@@ -1420,17 +1449,18 @@ function init(){
     getWpm:()=>S.wpm,
     onSpeed:speedGhost,
     getSizeIndex:()=>Math.max(0, SIZES.indexOf(S.size)),
-    setSizeIndex:(i)=>{ if(SIZES[i]!==S.size){ setSize(SIZES[i]); Haptics.trigger("light"); } },
+    setSizeIndex:(i)=>{ Hints.used("pinch"); if(SIZES[i]!==S.size){ setSize(SIZES[i]); Haptics.trigger("light"); } },
     onSwipe:(dir)=>{
       if(S.cardOpen) return;
       if(!$("resting").classList.contains("hidden") || !S.tokens.length) return;
       dir>0 ? backSentence() : fwdSentence();   // the step flashes its own chevron
+      Hints.used("zones");
       Haptics.trigger("light");
     },
     // hold the word you're hearing to mark its sentence — the stream never stops
     onHold:()=>{
       if(S.cardOpen || !S.tokens.length) return;
-      if($("resting").classList.contains("hidden")) markCurrent(false);
+      if($("resting").classList.contains("hidden")){ markCurrent(false); Hints.used("holdmark"); }
     },
   });
   $("stage").addEventListener("click",(e)=>{
@@ -1441,8 +1471,8 @@ function init(){
     if(started && S.tokens.length){
       const r=$("stage").getBoundingClientRect();
       const x=(e.clientX-r.left)/r.width;
-      if(x<0.2){ backSentence(); return; }
-      if(x>0.8){ fwdSentence(); return; }
+      if(x<0.2){ backSentence(); Hints.used("zones"); return; }
+      if(x>0.8){ fwdSentence(); Hints.used("zones"); return; }
     }
     toggle();
   });
@@ -1572,7 +1602,7 @@ function init(){
   // keyboard
   document.addEventListener("keydown",e=>{
     if(!$("reader").classList.contains("show")) return;
-    if($("done").classList.contains("show")||$("about").classList.contains("show")||$("review").classList.contains("show")||$("patron").classList.contains("show")) return;  // a modal owns the keyboard
+    if($("done").classList.contains("show")||$("about").classList.contains("show")||$("review").classList.contains("show")||$("patron").classList.contains("show")||$("guide").classList.contains("show")) return;  // a modal owns the keyboard
     // contents panel / mobile settings sheet owns the keyboard while open
     const sheetOpen = isSheet() && $("moreWrap").classList.contains("open");
     if(tocOpen() || sheetOpen){
@@ -1601,6 +1631,7 @@ function init(){
     else if(e.code==="ArrowDown"){e.preventDefault();nudgeWpm(S.wpm-25);}
     else if(e.code==="KeyM"){e.preventDefault(); markCurrent(e.shiftKey);}   // M sentence, Shift+M word
     else if(e.code==="KeyR"){e.preventDefault(); replaySentence();}
+    else if(e.key==="?"){e.preventDefault(); openGuide();}
     else if(e.code==="Escape"){requestHome();}
   });
 

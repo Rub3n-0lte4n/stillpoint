@@ -205,7 +205,7 @@
     </section>
 
     <footer class="site">
-      Your files never leave this device. Everything happens locally, in your browser. · <a href="#" id="aboutLink">How it works</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
+      Your files never leave this device. Everything happens locally, in your browser. · <a href="#" id="aboutLink">How it works</a> · <a href="#" id="guideLink">Reader guide</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
     </footer>
   </div>
 </div>
@@ -395,11 +395,13 @@
             <button type="button" class="linklike" id="blockModeAdvanced">Per-type…</button>
             <div class="bmg hidden" id="blockModeGrid"></div>
           </div>
+
+          <button type="button" class="linklike guide-open" id="settingsGuide">Open the guide</button>
         </div>
       </div>
 
       <div class="kbd-hint">
-        <kbd>Space</kbd> play/pause &nbsp; <kbd>←</kbd><kbd>→</kbd> sentence &nbsp; <kbd>⇧←</kbd> back 10 &nbsp; <kbd>↑</kbd><kbd>↓</kbd> speed &nbsp; <kbd>M</kbd> mark &nbsp; <kbd>R</kbd> replay &nbsp; <kbd>Esc</kbd> library
+        <kbd>Space</kbd> play/pause &nbsp; <kbd>←</kbd><kbd>→</kbd> sentence &nbsp; <kbd>⇧←</kbd> back 10 &nbsp; <kbd>↑</kbd><kbd>↓</kbd> speed &nbsp; <kbd>M</kbd> mark &nbsp; <kbd>R</kbd> replay &nbsp; <kbd>Esc</kbd> library &nbsp; <kbd>?</kbd> guide
       </div>
     </div>
   </div>
@@ -473,6 +475,81 @@
       <button type="button" class="btn ghost" id="patronUnlock">Unlock</button>
     </div>
     <p class="patron-hint" id="patronHint">Your code appears on the confirmation page after supporting.</p>
+  </div>
+</div>
+
+<!-- ============ THE GUIDE (complete manual) ============ -->
+<div class="about" id="guide">
+  <div class="about-card guide-card" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <button type="button" class="about-x" id="guideClose" aria-label="Close">✕</button>
+    <h3 id="guideTitle">The Stillpoint guide</h3>
+    <p class="about-lead">Everything the reader can do. Skim the part you need, or read it once and know the whole instrument.</p>
+
+    <section class="g-sec">
+      <h4>Reading</h4>
+      <div class="g-row"><span class="g-act">Play or pause</span><span class="g-how">Tap the reading area<span class="kb-only">, or press <kbd>Space</kbd></span>.</span></div>
+      <div class="g-row"><span class="g-act">The countdown</span><span class="g-how">Three beats settle your eyes before the words begin. Turn it off under Aids.</span></div>
+      <div class="g-row"><span class="g-act">Picking up again</span><span class="g-how">Resuming rewinds five words and eases back up to your pace.</span></div>
+    </section>
+
+    <section class="g-sec">
+      <h4>Moving around</h4>
+      <div class="g-row"><span class="g-act">Step a sentence</span><span class="g-how">Swipe the reading area or tap its edges. The arrows beside play do the same.<span class="kb-only"> Keys: <kbd>←</kbd> <kbd>→</kbd>.</span></span></div>
+      <div class="g-row kb-only"><span class="g-act">Back ten words</span><span class="g-how"><kbd>⇧</kbd><kbd>←</kbd> steps back ten words for a second look.</span></div>
+      <div class="g-row"><span class="g-act">Replay this sentence</span><span class="g-how">The ↺ button starts the sentence over and plays.<span class="kb-only"> Key: <kbd>R</kbd>.</span></span></div>
+      <div class="g-row"><span class="g-act">Jump anywhere</span><span class="g-how">Drag the progress bar. Chapters wait under Contents in the top bar.</span></div>
+    </section>
+
+    <section class="g-sec">
+      <h4>Speed and size</h4>
+      <div class="g-row"><span class="g-act">Change speed</span><span class="g-how">Drag up or down on the reading area, or use − and + beside the slider.<span class="kb-only"> Keys: <kbd>↑</kbd> <kbd>↓</kbd>.</span> The gold number is your live pace.</span></div>
+      <div class="g-row"><span class="g-act">Text size</span><span class="g-how">Pinch the reading area, or pick S · M · L · XL in Reading settings.</span></div>
+      <div class="g-row"><span class="g-act">The pacing</span><span class="g-how">Smart pace lingers on dense sentences, and every run starts gently before reaching full speed.</span></div>
+    </section>
+
+    <section class="g-sec">
+      <h4>Marking</h4>
+      <div class="g-row"><span class="g-act">Highlight a sentence</span><span class="g-how">Hold the word as it streams, or tap the bookmark button.<span class="kb-only"> Key: <kbd>M</kbd>.</span></span></div>
+      <div class="g-row"><span class="g-act">Highlight one word</span><span class="g-how">Hold the bookmark button.<span class="kb-only"> Key: <kbd>⇧</kbd><kbd>M</kbd>.</span></span></div>
+      <div class="g-row"><span class="g-act">Review and export</span><span class="g-how">Highlights gather by chapter. Review them from the finish screen and export everything as Markdown.</span></div>
+    </section>
+
+    <section class="g-sec">
+      <h4>Tables and figures</h4>
+      <div class="g-row"><span class="g-act">Non-linear content</span><span class="g-how">When a book carries a table, an image or a quote, the stream pauses and shows it whole. Pick Pause &amp; show, Page view, or Collect in Reading settings, per document and per type. Collected pieces wait in Figures &amp; tables, under Contents.</span></div>
+    </section>
+
+    <section class="g-sec">
+      <h4>Reading aids</h4>
+      <div class="g-row"><span class="g-act">Countdown</span><span class="g-how">The 3 · 2 · 1 before the words.</span></div>
+      <div class="g-row"><span class="g-act">Context</span><span class="g-how">Dim neighbours resting around the focal word.</span></div>
+      <div class="g-row"><span class="g-act">Smart pace</span><span class="g-how">A touch more time on dense sentences.</span></div>
+      <div class="g-row"><span class="g-act">Immersive</span><span class="g-how">The controls fade while you read. Tap anywhere to bring them back.</span></div>
+    </section>
+
+    <section class="g-sec">
+      <h4>Your library</h4>
+      <div class="g-row"><span class="g-act">Where books live</span><span class="g-how">Books stay on this device and reopen where you left off. Nothing is uploaded, ever.</span></div>
+      <div class="g-row"><span class="g-act">Remove a book</span><span class="g-how">Swipe it left, or tap ✕. Undo waits in the message that follows.</span></div>
+      <div class="g-row"><span class="g-act">Move to another device</span><span class="g-how">Share or Export packs your books, positions and settings into one file. Import it on the other device and the libraries merge.</span></div>
+      <div class="g-row"><span class="g-act">The streak</span><span class="g-how">The ring fills as you meet your daily minutes. Set the goal with − and +.</span></div>
+    </section>
+
+    <section class="g-sec kb-only">
+      <h4>Keys</h4>
+      <div class="g-keys">
+        <span><kbd>Space</kbd> play / pause</span>
+        <span><kbd>←</kbd><kbd>→</kbd> sentence</span>
+        <span><kbd>⇧←</kbd> back 10</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> speed</span>
+        <span><kbd>M</kbd> mark sentence</span>
+        <span><kbd>⇧M</kbd> mark word</span>
+        <span><kbd>R</kbd> replay</span>
+        <span><kbd>Esc</kbd> library</span>
+        <span><kbd>?</kbd> this guide</span>
+        <span><kbd>Home</kbd><kbd>End</kbd> jump, on the progress bar</span>
+      </div>
+    </section>
   </div>
 </div>
 
