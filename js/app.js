@@ -1,5 +1,5 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
-import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems } from "./text.js";
+import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt } from "./text.js";
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
@@ -16,6 +16,8 @@ const BASE_TITLE = document.title;   // restored when leaving the reader
 const S = {
   tokens: [],          // [{w, end, pause}]
   units: [],           // [{title, start}]  (chapters/pages)
+  chapters: [{ title: null, start: 0, end: 1 }], // chapterGrid() — scrubber scope
+  curCh: -1,           // current chapter segment (-1 = force meta refresh)
   index: 0,
   playing: false,
   mode: "orp",
@@ -674,12 +676,20 @@ function exportHighlights(){
 function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
 function updateProgress(){
   const total = S.tokens.length||1;
-  const pct = Math.min(100, (S.index/total)*100);
+  const grid = (S.chapters && S.chapters.length) ? S.chapters : [{title:null,start:0,end:total}];
+  const k = chapterAt(grid, S.index);
+  const seg = grid[k];
+  const span = Math.max(1, seg.end - seg.start);
+  const pct = Math.min(100, ((S.index - seg.start)/span)*100);
   $("trackFill").style.width = pct+"%";
   $("trackKnob").style.left = pct+"%";
-  const tk=$("track"); tk.setAttribute("aria-valuenow", Math.round(pct)); tk.setAttribute("aria-valuetext", Math.round(pct)+"% read");
-  $("tElapsed").textContent = fmt(S.index/S.wpm*60);
-  $("tLeft").textContent = "-"+fmt((total-S.index)/S.wpm*60);
+  const tk=$("track"); tk.setAttribute("aria-valuenow", Math.round(pct));
+  tk.setAttribute("aria-valuetext", Math.round(pct) + (seg.title ? "% of "+seg.title : "% read"));
+  $("tElapsed").textContent = fmt((S.index - seg.start)/S.wpm*60);
+  $("tLeft").textContent = "-"+fmt((seg.end - S.index)/S.wpm*60);
+  // the top-right meta line names the chapter the bar describes (book-scope
+  // documents keep the static parse meta: "EPUB · 12 chapters · 84,120 words")
+  if(k !== S.curCh){ S.curCh = k; $("docMeta").textContent = seg.title || S.meta; }
   if(S.units.length>1){
     let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=S.index) u=k; }
     if(u!==S.curUnit && !$("toc").hasAttribute("inert")) renderToc();
@@ -839,11 +849,13 @@ function removeItem(item){
 }
 
 /* ---------------- loading a document ---------------- */
-function openReader(tokens, units, title, meta, key, blocks, nav){
+function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   S.tokens=tokens; S.units=units&&units.length?units:[{title:"Start",start:0}];
   // The declared ToC (EPUB nav/NCX, PDF outline) when the book has one — this is
   // what the Contents panel lists, like Apple Books. Units remain the reading grid.
   S.nav = (Array.isArray(nav) && nav.length>1) ? nav : null;
+  S.chapters = chapterGrid(kind, S.nav, S.units, tokens.length);
+  S.curCh = -1;   // first updateProgress sets the meta line
   S.title=title; S.meta=meta; S.key=key; S.index=0;
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   const prior = loadLib().find(x=>x.key===key);
@@ -919,17 +931,17 @@ async function openFromStore(item){
   if(!rec){ toast(`“${item.title}” isn't on this device anymore. Open it once to remember it.`); return; }
   if(rec.kind==="text"){
     const toks=tokenize(rec.text);
-    openReader(toks,[{title:"Pasted text",start:0}],item.title,`TEXT · ${toks.length.toLocaleString()} words`,item.key);
+    openReader(toks,[{title:"Pasted text",start:0}],item.title,`TEXT · ${toks.length.toLocaleString()} words`,item.key,[],null,"text");
     return;
   }
   showParse("Opening "+item.title+"…","Reading from this device",{kind:rec.kind,name:rec.name||item.title,size:rec.blob?rec.blob.size:0});
   try{
     if(rec.kind==="pdf"){
       const {tokens,units,pages,blocks,nav}=await parsePDF(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key,blocks,nav);
+      hideParse(); openReader(tokens,units,item.title,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,item.key,blocks,nav,"pdf");
     } else {
       const {tokens,units,chapters,blocks,nav}=await parseEPUB(rec.blob, setParse);
-      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key,blocks,nav);
+      hideParse(); openReader(tokens,units,item.title,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,item.key,blocks,nav,"epub");
     }
   }catch(err){ hideParse(); toast("Couldn't reopen that file: "+(err&&err.message?err.message:err), {error:true, duration:9000, action:"Retry", onAction:()=>openFromStore(item)}); }
 }
@@ -999,12 +1011,12 @@ async function handleFile(file){
     if(kind==="pdf"){
       const {tokens,units,pages,blocks,nav}=await parsePDF(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key,blocks,nav);
+      openReader(tokens,units,name,`PDF · ${pages} pages · ${tokens.length.toLocaleString()} words`,key,blocks,nav,"pdf");
       persist(key,{kind:"pdf",blob:file,name:file.name});
     } else {
       const {tokens,units,chapters,blocks,nav}=await parseEPUB(file, setParse);
       hideParse();
-      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key,blocks,nav);
+      openReader(tokens,units,name,`EPUB · ${chapters} chapters · ${tokens.length.toLocaleString()} words`,key,blocks,nav,"epub");
       persist(key,{kind:"epub",blob:file,name:file.name});
     }
   }catch(err){
@@ -1396,7 +1408,7 @@ function init(){
     if(!txt){ $("paste").focus(); return; }
     const toks=tokenize(txt);
     const key="paste::"+txt.length;
-    openReader(toks,[{title:"Pasted text",start:0}],"Pasted text",`TEXT · ${toks.length.toLocaleString()} words`,key);
+    openReader(toks,[{title:"Pasted text",start:0}],"Pasted text",`TEXT · ${toks.length.toLocaleString()} words`,key,[],null,"text");
     persist(key,{kind:"text",text:txt});
   };
   // "Try it" starts reading immediately — the sample is the first-run experience,
@@ -1405,7 +1417,7 @@ function init(){
     closeAbout();
     const toks=tokenize(DEMO);
     const key="paste::"+DEMO.length;
-    openReader(toks,[{title:"Sample passage",start:0}],"Sample passage",`TEXT · ${toks.length.toLocaleString()} words`,key);
+    openReader(toks,[{title:"Sample passage",start:0}],"Sample passage",`TEXT · ${toks.length.toLocaleString()} words`,key,[],null,"text");
     persist(key,{kind:"text",text:DEMO});
   };
   $("demoBtn").onclick=()=>{ $("paste").value=DEMO; $("paste").focus(); };
@@ -1607,22 +1619,25 @@ function init(){
 
   // scrubber
   const track=$("track");
-  const scrubTo=(clientX)=>{ const r=track.getBoundingClientRect(); const p=Math.max(0,Math.min(1,(clientX-r.left)/r.width)); jumpTo(Math.round(p*(S.tokens.length-1))); };
+  const scrubTo=(clientX)=>{ const r=track.getBoundingClientRect(); const p=Math.max(0,Math.min(1,(clientX-r.left)/r.width));
+    const seg=S.chapters[chapterAt(S.chapters,S.index)];
+    jumpTo(seg.start + Math.round(p*(seg.end-seg.start))); };
   let dragging=false;
   track.addEventListener("mousedown",e=>{dragging=true;scrubTo(e.clientX);});
   window.addEventListener("mousemove",e=>{if(dragging)scrubTo(e.clientX);});
   window.addEventListener("mouseup",()=>dragging=false);
   track.addEventListener("touchstart",e=>scrubTo(e.touches[0].clientX),{passive:true});
   track.addEventListener("touchmove",e=>scrubTo(e.touches[0].clientX),{passive:true});
-  // keyboard scrubbing when the progress bar has focus (arrows step ~2%, Home/End jump)
+  // keyboard scrubbing when the progress bar has focus (arrows step ~2% of the chapter, Home/End jump to its edges)
   track.addEventListener("keydown",e=>{
-    const total=S.tokens.length-1; if(total<1) return;
-    const step=Math.max(1, Math.round(total*0.02));
+    if(S.tokens.length<2) return;
+    const seg=S.chapters[chapterAt(S.chapters,S.index)];
+    const step=Math.max(1, Math.round((seg.end-seg.start)*0.02));
     let handled=true;
     if(e.code==="ArrowLeft"||e.code==="ArrowDown") jumpTo(S.index-step);
     else if(e.code==="ArrowRight"||e.code==="ArrowUp") jumpTo(S.index+step);
-    else if(e.code==="Home") jumpTo(0);
-    else if(e.code==="End") jumpTo(total);
+    else if(e.code==="Home") jumpTo(seg.start);
+    else if(e.code==="End") jumpTo(seg.end-1);
     else handled=false;   // Space etc. falls through to play/pause
     if(handled){ e.preventDefault(); e.stopPropagation(); }
   });
