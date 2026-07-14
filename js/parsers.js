@@ -20,6 +20,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "js/vendor/pdf.worker.min.js";
 // else descends normally and its text becomes tokens as before.
 const EPUB_BLOCK_KIND = { table:"table", img:"image", figure:"figure", blockquote:"quote", pre:"code" };
 
+// Block-level tags whose boundaries must read as whitespace. Minified sources
+// (Calibre etc.) put no whitespace between tags, so without this the last word
+// of a paragraph glues to the first word of the next ("TreeAlthough"). Inline
+// tags (span/em/a…) are deliberately absent — they often split words mid-run.
+const EPUB_BLOCK_BREAK = new Set([
+  "p","div","br","hr","h1","h2","h3","h4","h5","h6","li","ul","ol","dl","dt","dd",
+  "tr","td","th","caption","section","article","aside","header","footer","main","nav","address",
+]);
+
 /* ---------------- shared helpers ---------------- */
 
 // Strip script/style, on* handlers, and javascript: URLs from captured EPUB markup
@@ -256,9 +265,9 @@ async function resolveEpubImage(zip, sectionDir, src){
 }
 
 // In-order DOM walk of an EPUB section body. Accumulates prose into a buffer
-// (flushed at block boundaries) so plain prose tokenizes identically to the old
-// body.textContent path; captured block elements become block descriptors.
-// Exported for tests.
+// (flushed at block boundaries); block-level tag boundaries contribute a space
+// (see EPUB_BLOCK_BREAK) so minified sources don't glue words across paragraphs;
+// captured block elements become block descriptors. Exported for tests.
 export async function walkSection(body, ctx){
   const sTokens = [];          // section-local tokens
   const sBlocks = [];          // section-local { kind, payload, after }
@@ -283,7 +292,10 @@ export async function walkSection(body, ctx){
         if(payload) sBlocks.push({ kind, payload, after: sTokens.length });
         continue; // captured element — do not descend
       }
+      const brk = EPUB_BLOCK_BREAK.has(tag);
+      if(brk) buffer += " ";
       await walk(child);
+      if(brk) buffer += " ";
     }
   }
   await walk(body);

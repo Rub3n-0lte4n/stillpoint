@@ -61,6 +61,18 @@ let mono = true; for (let i = 1; i < sBlocks.length; i++) if (sBlocks[i].after <
 ok(mono, "block.after monotonic non-decreasing");
 ok(sBlocks.every(b => b.after >= 0 && b.after <= sTokens.length), "block.after within [0, tokens.length]");
 
+/* ---------- minified EPUB: block boundaries must separate words ---------- */
+// Calibre-style sources put no whitespace between tags; block-level boundaries
+// must read as a space, while inline tags must never split a word.
+const packed = `<!doctype html><html><body><div><h2>The Old Tree</h2><br/><p>Although late.</p><p>It rang.</p><ul><li>first</li><li>second</li></ul><p>Mu<span>sa</span>shi <i>wal</i>ks on.</p></div></body></html>`;
+const pbody = new DOMParser().parseFromString(packed, "text/html").body;
+const packedWalk = await walkSection(pbody, { zip, sectionDir: "OEBPS" });
+const pw = packedWalk.sTokens.map(t => t.w);
+ok(pw.includes("Tree") && pw.includes("Although"), "h2/br/p boundary splits words: " + JSON.stringify(pw));
+ok(pw.includes("late.") && pw.includes("It"), "p/p boundary splits words");
+ok(pw.includes("first") && pw.includes("second"), "li/li boundary splits words");
+ok(pw.includes("Musashi") && pw.includes("walks"), "inline span/i do NOT split words: " + JSON.stringify(pw.slice(-4)));
+
 /* ---------- sanitizeHTML direct ---------- */
 const dirty = new DOMParser().parseFromString(
   `<!doctype html><html><body><div id="d"><a href="javascript:evil()">x</a><b onmouseover="hack()">y</b><style>i{}</style></div></body></html>`, "text/html");
