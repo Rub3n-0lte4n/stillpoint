@@ -26,7 +26,7 @@
 **Interfaces:**
 - Produces: `THEMES` includes `{ id:"tokyo", name:"Tokyo Night" }` (last). `isPatronTheme("tokyo") === true`. Task 2's CSS block and Task 3's E2E rely on the `tokyo` id.
 
-- [ ] **Step 1: Update the pinned assertions to expect 5 themes**
+- [x] **Step 1: Update the pinned assertions to expect 5 themes**
 
 `test/patron.test.mjs` line 22 becomes:
 
@@ -40,12 +40,12 @@ Line 26 becomes:
 ok(isPatronTheme("garden") === true && isPatronTheme("abyss") === true && isPatronTheme("ember") === true && isPatronTheme("tokyo") === true, "other themes are patron-only");
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `node test/patron.test.mjs`
 Expected: FAIL on "5 themes" (list still has 4).
 
-- [ ] **Step 3: Add the theme to `js/patron.js`**
+- [x] **Step 3: Add the theme to `js/patron.js`**
 
 The THEMES array becomes:
 
@@ -59,11 +59,11 @@ export const THEMES = [
 ];
 ```
 
-- [ ] **Step 4: Verify green**
+- [x] **Step 4: Verify green**
 
 Run: `node test/patron.test.mjs` → all pass. Then `npm test` → green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add js/patron.js test/patron.test.mjs
@@ -82,7 +82,7 @@ git commit -m "feat(theme): tokyo night joins the patron shelf"
 - Consumes: `tokyo` id from Task 1.
 - Produces: `--stage-sheen/--stage-core/--stage-edge/--stage-vign` tokens; `html[data-theme="tokyo"]` block. Task 3 asserts computed styles per theme.
 
-- [ ] **Step 1: Default stage tokens in `:root`**
+- [x] **Step 1: Default stage tokens in `:root`**
 
 After the `--glow-b` line in `:root`, add (values copied verbatim from the current `.stage` rule):
 
@@ -94,7 +94,7 @@ After the `--glow-b` line in `:root`, add (values copied verbatim from the curre
     --stage-vign:rgba(7,4,14,0.55);
 ```
 
-- [ ] **Step 2: Consume them in `.stage`**
+- [x] **Step 2: Consume them in `.stage`**
 
 The `background:` and `box-shadow:` declarations of `.stage` become:
 
@@ -106,7 +106,7 @@ The `background:` and `box-shadow:` declarations of `.stage` become:
     box-shadow:var(--e-3), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.4), inset 0 0 90px var(--stage-vign);
 ```
 
-- [ ] **Step 3: Stage overrides in the three existing theme blocks**
+- [x] **Step 3: Stage overrides in the three existing theme blocks**
 
 Append inside `html[data-theme="ember"]{…}`:
 
@@ -137,7 +137,7 @@ Also update the patron-block comment ("the focal amber never changes" stays true
      app assumes dark ground. */
 ```
 
-- [ ] **Step 4: Add the tokyo block after abyss (verbatim from the spec)**
+- [x] **Step 4: Add the tokyo block after abyss (verbatim from the spec)**
 
 ```css
   html[data-theme="tokyo"]{
@@ -153,11 +153,11 @@ Also update the patron-block comment ("the focal amber never changes" stays true
   }
 ```
 
-- [ ] **Step 5: Copy sweep**
+- [x] **Step 5: Copy sweep**
 
 `index.html:586`: "…reading themes made only for patrons: Ember Atelier, Night Garden, Abyss." becomes "…reading themes made only for patrons: Ember Atelier, Night Garden, Abyss, Tokyo Night." (README does not enumerate themes; no other mentions.)
 
-- [ ] **Step 6: Contrast check (spec: --ink-mute ≥5:1 on --bg-0)**
+- [x] **Step 6: Contrast check (spec: --ink-mute ≥5:1 on --bg-0)**
 
 Run this Node one-liner; expected ≥ 5.
 
@@ -167,7 +167,7 @@ node -e 'const L=h=>{const c=[1,3,5].map(i=>parseInt(h.slice(i,i+2),16)/255).map
 
 If < 5, lighten `--ink-mute` (e.g. `#b09dbb`) and re-run until ≥ 5; record the final hex.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add styles.css index.html
@@ -186,17 +186,17 @@ git commit -m "feat(theme): neon tokyo night; the stage ground finally follows t
 - Consumes: the built app; unlock code (enter via `Patron.unlock`-equivalent: set `fp_patron_v1` the way `js/patron.js` persists it — read the module to mirror the exact shape at write time).
 - Produces: green E2E, five theme screenshots for the user, live deploy.
 
-- [ ] **Step 1: Bump `sw.js` to v46**
+- [x] **Step 1: Bump `sw.js` to v46**
 
-- [ ] **Step 2: E2E script (scratchpad, raw CDP on :9224, server :8111)**
+- [x] **Step 2: E2E script (scratchpad, raw CDP on :9224, server :8111)**
 
 Checks: for each theme id (midnight, ember, garden, abyss, tokyo): grant patron state in localStorage first (mirror `js/patron.js`'s stored shape exactly), reload, `applyTheme` via the real Theme seg buttons in the settings panel, then assert (a) `document.documentElement.dataset.theme` correct (absent for midnight); (b) `getComputedStyle(document.querySelector(".stage")).background` differs between themes and, for midnight, equals the value captured on the PRE-change deployed site (fetch live stillpointreader.com stage computed value first, compare) — pixel-identity guarantee; (c) `meta[name=theme-color]` equals the theme's `--bg-0`; (d) with patron state cleared, clicking Tokyo Night opens the patron pitch and the theme does NOT apply; (e) at 1280×900 and 390×844, `#themeSeg`'s scrollWidth ≤ clientWidth of its container and the fifth button's right edge sits inside the settings panel (no clipping) — if it clips on desktop, add `#themeSeg{flex-wrap:wrap;border-radius:22px}` outside the mobile media query and re-check. Screenshot landing + reader per theme (`Page.captureScreenshot`) into the scratchpad.
 
-- [ ] **Step 3: Run it**
+- [x] **Step 3: Run it**
 
 Expected: all checks green, 0 exceptions, 10 screenshots written.
 
-- [ ] **Step 4: Full suite, commit, deploy**
+- [x] **Step 4: Full suite, commit, deploy**
 
 ```bash
 npm test   # green

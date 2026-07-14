@@ -93,3 +93,18 @@ adjust lightness, not the direction, if it falls short.
 - No storage changes; `fp_prefs.theme:"tokyo"` round-trips through existing
   backup import validation (unknown themes already fall back to midnight for
   non-patrons via the boot guard).
+
+## Amendment (2026-07-15, shipped)
+
+During verification two more hardcoded-midnight surfaces surfaced on the landing
+(the same bug class as the stage): `.hero-demo` (the stage's landing twin) and
+`.dz-icon` (the dropzone chip). Both now derive from tokens — the hero card
+reuses the stage tokens with color-mix percentages that re-derive its original
+softer alphas (midnight visually unchanged), the chip mixes
+`--amethyst-deep`/`--rose`. Remaining low-alpha amethyst glow tints (play
+shadow, seg active, knob halo, ::selection) are deliberately untouched — they
+have shipped under three patron themes since 2026-07-04 without complaint.
+Final tokyo `--ink-mute` contrast on `--bg-0`: 6.97:1. Verification gotcha for
+the record: the app's own service worker serves the precached shell to local
+CDP runs — same CACHE_VERSION means stale CSS even with the HTTP cache
+disabled; test on a fresh browser profile after any mid-session CSS edit.
