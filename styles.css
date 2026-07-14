@@ -22,6 +22,11 @@
     --focus-dim:#b9b1c9;       /* surrounding letters, softly dimmed so the focal letter leads */
     --glow-a:rgba(139,92,246,0.18);  /* ambient page glows — themable */
     --glow-b:rgba(230,166,200,0.10);
+    /* the reading stage's ground — themable (defaults = midnight, pixel-identical) */
+    --stage-sheen:rgba(197,163,255,0.07);
+    --stage-core:rgba(36,23,54,0.78);
+    --stage-edge:rgba(11,7,19,0.62);
+    --stage-vign:rgba(7,4,14,0.55);
 
     /* ---- spacing · 8pt scale ---- */
     --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:24px; --s-6:32px; --s-7:48px; --s-8:64px;
@@ -400,10 +405,10 @@
     width:100%;max-width:min(1360px,100%);border-radius:var(--r-lg);position:relative;
     touch-action:none;   /* the stage owns its gestures: drag=speed, swipe=sentence, pinch=size */
     background:
-      radial-gradient(120% 90% at 50% 0%, rgba(197,163,255,0.07), transparent 55%),
-      radial-gradient(760px 320px at 50% 52%, rgba(36,23,54,0.78), rgba(11,7,19,0.62));
+      radial-gradient(120% 90% at 50% 0%, var(--stage-sheen), transparent 55%),
+      radial-gradient(760px 320px at 50% 52%, var(--stage-core), var(--stage-edge));
     border:1px solid var(--hair);
-    box-shadow:var(--e-3), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.4), inset 0 0 90px rgba(7,4,14,0.55);
+    box-shadow:var(--e-3), inset 0 1px 0 rgba(255,255,255,0.05), inset 0 -1px 0 rgba(0,0,0,0.4), inset 0 0 90px var(--stage-vign);
     padding:70px 30px;min-height:0;display:flex;align-items:center;justify-content:center;
     overflow:hidden;cursor:pointer;
   }
@@ -980,8 +985,9 @@
   @media (prefers-reduced-motion: reduce){ .review-card{animation:none !important;} }
 
   /* ================= PATRON ================= */
-  /* Patron themes — token overrides only; the focal amber never changes.
-     Dark hue-shifts by design: every rgba/contrast in the app assumes dark ground. */
+  /* Patron themes — token overrides only (incl. the stage ground); the focal
+     amber never changes. Dark hue-shifts by design: every rgba/contrast in the
+     app assumes dark ground. */
   html[data-theme="ember"]{
     --bg-deep:#080403; --bg-0:#0d0705; --bg-1:#150b07; --bg-2:#221008;
     --surface:rgba(44,26,18,0.55); --surface-2:rgba(62,36,22,0.45); --surface-inset:rgba(16,8,5,0.5);
@@ -990,6 +996,8 @@
     --amethyst:#ffb894; --amethyst-deep:#e0703c; --rose:#f0a486; --focus-dim:#c9b7a9;
     --glow-a:rgba(224,112,60,0.16); --glow-b:rgba(230,197,135,0.09);
     --glow-amethyst:0 22px 60px -24px rgba(224,112,60,0.5);
+    --stage-sheen:rgba(255,184,148,0.06); --stage-core:rgba(54,28,16,0.78);
+    --stage-edge:rgba(16,8,5,0.62); --stage-vign:rgba(12,6,3,0.55);
   }
   html[data-theme="garden"]{
     --bg-deep:#030806; --bg-0:#05100b; --bg-1:#081810; --bg-2:#0c2417;
@@ -999,6 +1007,8 @@
     --amethyst:#9fe8c0; --amethyst-deep:#3ba873; --rose:#b8e6cc; --focus-dim:#aec4b6;
     --glow-a:rgba(59,168,115,0.15); --glow-b:rgba(230,197,135,0.08);
     --glow-amethyst:0 22px 60px -24px rgba(59,168,115,0.5);
+    --stage-sheen:rgba(159,232,192,0.06); --stage-core:rgba(16,44,30,0.78);
+    --stage-edge:rgba(6,16,11,0.62); --stage-vign:rgba(4,12,8,0.55);
   }
   html[data-theme="abyss"]{
     --bg-deep:#03050a; --bg-0:#050810; --bg-1:#081020; --bg-2:#0c1830;
@@ -1008,6 +1018,19 @@
     --amethyst:#9cc3ff; --amethyst-deep:#4a7fe0; --rose:#a6c8f0; --focus-dim:#adbacb;
     --glow-a:rgba(74,127,224,0.16); --glow-b:rgba(166,200,240,0.08);
     --glow-amethyst:0 22px 60px -24px rgba(74,127,224,0.5);
+    --stage-sheen:rgba(156,195,255,0.06); --stage-core:rgba(20,32,58,0.78);
+    --stage-edge:rgba(6,10,19,0.62); --stage-vign:rgba(4,7,14,0.55);
+  }
+  html[data-theme="tokyo"]{
+    --bg-deep:#07070d; --bg-0:#0a0a12; --bg-1:#10101c; --bg-2:#171728;
+    --surface:rgba(32,26,48,0.55); --surface-2:rgba(46,34,66,0.45); --surface-inset:rgba(10,8,18,0.5);
+    --hair:rgba(255,120,170,0.13); --hair-strong:rgba(255,120,170,0.24); --hair-soft:rgba(255,120,170,0.06);
+    --ink-bright:#fff5fa; --ink:#f0e7f2; --ink-soft:#cdbcd4; --ink-mute:#a693b0;
+    --amethyst:#ff6b9d; --amethyst-deep:#ff2d55; --rose:#5bc8ff; --focus-dim:#c4b3c8;
+    --glow-a:rgba(255,45,120,0.14); --glow-b:rgba(60,180,255,0.10);
+    --glow-amethyst:0 22px 60px -24px rgba(255,45,85,0.5);
+    --stage-sheen:rgba(255,92,150,0.06); --stage-core:rgba(26,18,38,0.78);
+    --stage-edge:rgba(8,7,15,0.62); --stage-vign:rgba(6,5,12,0.55);
   }
 
   /* patron card in the support section — one quiet step above the tip tiers */
