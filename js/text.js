@@ -1,10 +1,45 @@
 // Text utilities: tokenizing, ORP focus point, HTML escaping, and the demo passage.
 
 // Split text into word tokens, flagging sentence ends + clause pauses for natural pacing.
+// Two readability post-passes before flagging (see 2026-07-15 dash-ellipsis spec):
+// em-dash-joined pairs split (the dash trails the first word, whose pause flag
+// gives it a clause beat), and spaced/lone ellipses gather into one "…" on the
+// preceding word so ". . ." is one fixation, not three sentence-end pauses.
+const WORDISH = "A-Za-z0-9À-ž";
+// built once — this runs for every word of every book
+const DASH_SPLIT = new RegExp(`[${WORDISH}"'”’)\\]][—―](?=["'“‘(\\[]?[${WORDISH}])`);
+function splitDashes(w){
+  const parts = [];
+  let rest = w;
+  for(;;){
+    const m = rest.match(DASH_SPLIT);
+    if(!m){ parts.push(rest); return parts; }
+    const cut = m.index + 2;   // the char before the dash, plus the dash itself
+    parts.push(rest.slice(0, cut));
+    rest = rest.slice(cut);
+  }
+}
+function collapseEllipses(words){
+  const out = [];
+  for(const w of words){
+    if(/^[.…]+$/.test(w)){
+      const prev = out[out.length - 1];
+      if(prev === undefined){ out.push("…"); }
+      else if(!/^[.…]+$/.test(prev)){ out[out.length-1] = (prev + "…").replace(/[.…]+…$/, "…"); }
+      // a beat after a kept lone "…" is absorbed silently
+      continue;
+    }
+    out.push(w);
+  }
+  return out;
+}
 export function tokenize(text){
   const raw = text.replace(/\s+/g," ").trim();
   if(!raw) return [];
-  return raw.split(" ").map(w => ({
+  let words = [];
+  for(const w of raw.split(" ")) for(const p of splitDashes(w)) words.push(p);
+  words = collapseEllipses(words);
+  return words.map(w => ({
     w,
     end: /[.!?…]["')\]]?$/.test(w),
     pause: /[,;:—–)\]]["']?$/.test(w),
