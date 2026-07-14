@@ -39,6 +39,47 @@ export function chapterItems(units, index){
   return units.map((u,k)=>({ start:u.start, title:u.title, depth:u.depth||0, current:k===cur }));
 }
 
+/* ---------------- chapter grid (scrubber scope) ---------------- */
+// Segments the token stream into chapters for the dock scrubber. The declared
+// ToC (nav) is the real chapter list — Calibre-split spines are size-based, so
+// spine units are only trusted for EPUBs, and PDF page-units never (a per-page
+// bar would reset every ~250 words). No usable structure → one whole-book
+// segment, which keeps today's behavior with zero special cases downstream.
+export function chapterGrid(kind, nav, units, total){
+  const book = [{ title: null, start: 0, end: total }];
+  const fromEntries = (entries)=>{
+    const sorted = entries
+      .map(e => ({ title: e.title, start: Math.max(0, Math.min(total, e.start)) }))
+      .sort((a,b) => a.start - b.start);
+    if(!sorted.length || sorted[0].start > 0) sorted.unshift({ title: null, start: 0 });
+    // same-start duplicates keep the first entry, like the parser's nav dedupe
+    const dedup = [];
+    for(const s of sorted){ if(!dedup.length || s.start > dedup[dedup.length-1].start) dedup.push(s); }
+    const segs = [];
+    for(let k = 0; k < dedup.length; k++){
+      const end = k + 1 < dedup.length ? dedup[k+1].start : total;
+      if(end > dedup[k].start) segs.push({ title: dedup[k].title, start: dedup[k].start, end });
+    }
+    return segs;
+  };
+  if(Array.isArray(nav) && nav.length >= 2){
+    const segs = fromEntries(nav);
+    if(segs.length >= 2) return segs;
+  }
+  if(kind === "epub" && Array.isArray(units) && units.length >= 2){
+    const segs = fromEntries(units);
+    if(segs.length >= 2) return segs;
+  }
+  return book;
+}
+
+// Segment index for a token position; clamps below 0 and past the last end.
+export function chapterAt(grid, index){
+  let k = 0;
+  for(let i = 0; i < grid.length; i++){ if(grid[i].start <= index) k = i; else break; }
+  return k;
+}
+
 /* ---------------- sentence boundaries + pacing (Phase 3) ---------------- */
 // A sentence starts at index 0 or after any token whose `end` flag is set.
 export function sentenceStart(tokens, i){ let s=Math.min(i, tokens.length-1); while(s>0 && !tokens[s-1].end) s--; return Math.max(0,s); }
