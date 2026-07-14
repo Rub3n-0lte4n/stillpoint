@@ -19,11 +19,11 @@ ok(await verifyPatronCode("") === false, "empty rejected");
 ok(await verifyPatronCode("THERE-THE-DANCE-IS ", null) === true, "trailing space verifies");
 
 /* ---------- themes ---------- */
-ok(THEMES.length === 4 && THEMES[0].id === "midnight", "4 themes, midnight first/default");
+ok(THEMES.length === 5 && THEMES[0].id === "midnight", "5 themes, midnight first/default");
 ok(themeById("ember").name === "Ember Atelier", "themeById finds ember");
 ok(themeById("nope").id === "midnight", "unknown theme falls back to midnight");
 ok(isPatronTheme("midnight") === false, "midnight is free");
-ok(isPatronTheme("garden") === true && isPatronTheme("abyss") === true && isPatronTheme("ember") === true, "other themes are patron-only");
+ok(isPatronTheme("garden") === true && isPatronTheme("abyss") === true && isPatronTheme("ember") === true && isPatronTheme("tokyo") === true, "other themes are patron-only");
 ok(isPatronTheme("unknown") === false, "unknown id resolves to default (free)");
 ok(/^https:\/\/buy\.stripe\.com\//.test(PATRON_LINK), "patron link is a Stripe buy link");
 

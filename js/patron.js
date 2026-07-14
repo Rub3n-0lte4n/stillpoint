@@ -12,6 +12,7 @@ export const THEMES = [
   { id:"ember",    name:"Ember Atelier" },
   { id:"garden",   name:"Night Garden" },
   { id:"abyss",    name:"Abyss" },
+  { id:"tokyo",    name:"Tokyo Night" },
 ];
 
 export function themeById(id){ return THEMES.find(t=>t.id===id) || THEMES[0]; }
