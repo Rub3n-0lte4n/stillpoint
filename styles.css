@@ -200,10 +200,12 @@
   .hero-demo{
     position:relative;max-width:520px;margin:32px auto 0;height:128px;
     border-radius:var(--r-md);border:1px solid var(--hair);
+    /* the stage's landing twin — same themable ground; the color-mix percentages
+       re-derive this card's original softer alphas from the stage tokens */
     background:
-      radial-gradient(120% 90% at 50% 0%, rgba(197,163,255,0.06), transparent 55%),
-      radial-gradient(440px 170px at 50% 52%, rgba(36,23,54,0.74), rgba(11,7,19,0.55));
-    box-shadow:var(--e-1), inset 0 1px 0 rgba(255,255,255,0.04), inset 0 0 60px rgba(7,4,14,0.45);
+      radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--stage-sheen) 86%, transparent), transparent 55%),
+      radial-gradient(440px 170px at 50% 52%, color-mix(in srgb, var(--stage-core) 95%, transparent), color-mix(in srgb, var(--stage-edge) 89%, transparent));
+    box-shadow:var(--e-1), inset 0 1px 0 rgba(255,255,255,0.04), inset 0 0 60px color-mix(in srgb, var(--stage-vign) 82%, transparent);
     display:flex;align-items:center;justify-content:center;overflow:hidden;
   }
   .hero-demo::before{
@@ -258,7 +260,7 @@
   @keyframes dzBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
   .dz-icon{
     width:62px;height:62px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;
-    background:linear-gradient(150deg, rgba(139,92,246,0.35), rgba(230,166,200,0.18));
+    background:linear-gradient(150deg, color-mix(in srgb, var(--amethyst-deep) 35%, transparent), color-mix(in srgb, var(--rose) 18%, transparent));
     border:1px solid var(--hair-strong);
   }
   .dz-icon svg{width:30px;height:30px;stroke:var(--amethyst);fill:none;stroke-width:1.6;}
