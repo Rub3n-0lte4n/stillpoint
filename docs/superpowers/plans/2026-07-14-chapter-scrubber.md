@@ -28,7 +28,7 @@
 - Consumes: nothing new.
 - Produces: `chapterGrid(kind, nav, units, total) -> [{title:string|null, start:int, end:int}]` (end exclusive, ≥1 segment always, segments cover [0,total) exactly) and `chapterAt(grid, index) -> int` (segment index, clamped). Task 2 imports both from `./text.js`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `test/toc.test.mjs`:
 
@@ -107,12 +107,12 @@ test("chapterAt clamps and lands on boundaries correctly", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node test/toc.test.mjs`
 Expected: FAIL — `SyntaxError` / `does not provide an export named 'chapterGrid'`.
 
-- [ ] **Step 3: Implement in `js/text.js`**
+- [x] **Step 3: Implement in `js/text.js`**
 
 Insert after the `chapterItems` function:
 
@@ -156,12 +156,12 @@ export function chapterAt(grid, index){
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node test/toc.test.mjs`
 Expected: all tests pass (4 existing + 7 new). Then `npm test` — everything green.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add js/text.js test/toc.test.mjs
@@ -179,7 +179,7 @@ git commit -m "feat(chapters): a pure grid that knows where chapters begin and e
 - Consumes: `chapterGrid(kind, nav, units, total)`, `chapterAt(grid, index)` from Task 1.
 - Produces: `S.chapters` (grid array) and `S.curCh` (int, -1 = unset) for anyone reading reader state. `openReader` signature becomes `openReader(tokens, units, title, meta, key, blocks, nav, kind)` with `kind ∈ "pdf"|"epub"|"text"`.
 
-- [ ] **Step 1: Import the helpers**
+- [x] **Step 1: Import the helpers**
 
 Line 2 of `js/app.js` becomes:
 
@@ -187,7 +187,7 @@ Line 2 of `js/app.js` becomes:
 import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt } from "./text.js";
 ```
 
-- [ ] **Step 2: Add reader state**
+- [x] **Step 2: Add reader state**
 
 In the `S` literal, after the `units:` line, add:
 
@@ -196,7 +196,7 @@ In the `S` literal, after the `units:` line, add:
   curCh: -1,           // current chapter segment (-1 = force meta refresh)
 ```
 
-- [ ] **Step 3: Compute the grid at open + reset the cache**
+- [x] **Step 3: Compute the grid at open + reset the cache**
 
 In `openReader`, the signature line becomes:
 
@@ -211,7 +211,7 @@ Directly after the `S.nav = ...` line, add:
   S.curCh = -1;   // first updateProgress sets the meta line
 ```
 
-- [ ] **Step 4: Pass `kind` at all 8 callsites**
+- [x] **Step 4: Pass `kind` at all 8 callsites**
 
 Each `openReader(...)` call gains trailing arguments so `kind` lands in position 8. Text callers currently stop at `key`; they pass empty blocks and null nav explicitly:
 
@@ -223,7 +223,7 @@ Each `openReader(...)` call gains trailing arguments so `kind` lands in position
 - line 1399: `...,key,[],null,"text");`
 - line 1408: `...,key,[],null,"text");`
 
-- [ ] **Step 5: Make `updateProgress` grid-driven**
+- [x] **Step 5: Make `updateProgress` grid-driven**
 
 The first eight lines of `updateProgress` (through the `tLeft` assignment) become:
 
@@ -248,7 +248,7 @@ function updateProgress(){
 
 Everything from `if(S.units.length>1){` down is untouched (units still drive the ToC current-row + chapter-appendix toast).
 
-- [ ] **Step 6: Chapter-scope the drag scrub**
+- [x] **Step 6: Chapter-scope the drag scrub**
 
 `scrubTo` becomes:
 
@@ -260,7 +260,7 @@ Everything from `if(S.units.length>1){` down is untouched (units still drive the
 
 (Releasing at the far right lands on `seg.end`, the next chapter's first word — the bar then shows 0% of the next chapter. `jumpTo` already clamps to the last token.)
 
-- [ ] **Step 7: Chapter-scope the keyboard scrub**
+- [x] **Step 7: Chapter-scope the keyboard scrub**
 
 The track keydown handler's body down to `handled=false` becomes:
 
@@ -281,12 +281,12 @@ The track keydown handler's body down to `handled=false` becomes:
 
 (The comment above the handler becomes: `// keyboard scrubbing when the progress bar has focus (arrows step ~2% of the chapter, Home/End jump to its edges)`.)
 
-- [ ] **Step 8: Full unit suite**
+- [x] **Step 8: Full unit suite**
 
 Run: `npm test`
 Expected: all green (app.js has no node tests; this guards text.js and friends).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add js/app.js
@@ -305,7 +305,7 @@ git commit -m "feat(scrub): the bar, the times and the meta line describe this c
 - Consumes: the running app (Tasks 1-2), `musashi-test.epub` fixture (zip of `~/Desktop/Musashi.epub`, rebuilt if missing), local server on :8111, headless Chrome CDP on :9223.
 - Produces: a green E2E run, then the deployed site.
 
-- [ ] **Step 1: Bump the service worker cache**
+- [x] **Step 1: Bump the service worker cache**
 
 `sw.js` line 6 becomes:
 
@@ -313,7 +313,7 @@ git commit -m "feat(scrub): the bar, the times and the meta line describe this c
 const CACHE_VERSION = "stillpoint-v45";
 ```
 
-- [ ] **Step 2: Write the E2E script (scratchpad)**
+- [x] **Step 2: Write the E2E script (scratchpad)**
 
 Checks, against `http://127.0.0.1:8111` with the Musashi fixture loaded via `DOM.setFileInputFiles` on the drop-zone file input:
 
@@ -324,12 +324,12 @@ Checks, against `http://127.0.0.1:8111` with the Musashi fixture loaded via `DOM
 5. demo path (`#heroTry` click): `#docMeta` shows `TEXT · … words`, `aria-valuetext` ends `% read`, `#tLeft` equals the whole-passage time (book scope preserved);
 6. zero console errors.
 
-- [ ] **Step 3: Run the E2E**
+- [x] **Step 3: Run the E2E**
 
 Serve repo on :8111, launch headless Chrome on :9223, run the script.
 Expected: all checks green, 0 console errors.
 
-- [ ] **Step 4: Commit and deploy**
+- [x] **Step 4: Commit and deploy**
 
 ```bash
 git add sw.js
