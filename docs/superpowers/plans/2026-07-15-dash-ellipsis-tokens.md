@@ -27,7 +27,7 @@
 **Interfaces:**
 - Produces: unchanged `tokenize(text) -> [{w, end, pause}]` signature; new splitting/collapsing behavior. Helpers stay private — tests go through `tokenize()`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `test/tokenize.test.mjs`:
 
@@ -100,13 +100,13 @@ test("plain prose is untouched", () => {
 });
 ```
 
-- [ ] **Step 2: Add to the npm test chain and verify failure**
+- [x] **Step 2: Add to the npm test chain and verify failure**
 
 In `package.json`, the `test` script gains ` && node test/tokenize.test.mjs` at the end.
 Run: `node test/tokenize.test.mjs`
 Expected: FAIL (splits/merges not implemented; plain-prose test passes).
 
-- [ ] **Step 3: Implement the post-pass in `js/text.js`**
+- [x] **Step 3: Implement the post-pass in `js/text.js`**
 
 `tokenize` and two private helpers become:
 
@@ -161,18 +161,18 @@ export function tokenize(text){
 (The regex in `splitDashes` is built once per call from the shared `WORDISH`
 class; À-ž covers the romanized-Japanese accents in this library — Ō, ū.)
 
-- [ ] **Step 4: Verify green, then the whole suite**
+- [x] **Step 4: Verify green, then the whole suite**
 
 Run: `node test/tokenize.test.mjs` → all pass. `npm test` → green
 (existing suites guard sentence pacing, blocks, toc against regressions).
 
-- [ ] **Step 5: Musashi harness re-run**
+- [x] **Step 5: Musashi harness re-run**
 
 Run the session's `repro-punct.mjs` (scratchpad). Expected: `emDashJoin: 0`,
 `loneDot: 0`, `loneEllip: 0`, `loneDotRuns: 0`; total tokens ~418.4k
 (was 418,031; splits add, merges subtract).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add js/text.js test/tokenize.test.mjs package.json
@@ -189,16 +189,16 @@ git commit -m "feat(tokens): dashes split for the eye, ellipses gather into one 
 **Interfaces:**
 - Consumes: the session's `cdp-epub.mjs` harness (serves repo on :8111, Chrome CDP, `musashi-test.epub` fixture; temp-copy the fixture into the repo root for same-origin fetch, delete after).
 
-- [ ] **Step 1: Bump `sw.js` to v47**
+- [x] **Step 1: Bump `sw.js` to v47**
 
-- [ ] **Step 2: Browser smoke on a FRESH Chrome profile** (the SW serves stale
+- [x] **Step 2: Browser smoke on a FRESH Chrome profile** (the SW serves stale
   shells to reused profiles — 2026-07-15 gotcha)
 
 Run `cdp-epub.mjs` against the served repo. Expected: parse succeeds, token
 total in [418k, 419k], glued suspects ≤ 5 (the verbatim-source set), zero
 exceptions.
 
-- [ ] **Step 3: Commit, deploy, verify live**
+- [x] **Step 3: Commit, deploy, verify live**
 
 ```bash
 git add sw.js
