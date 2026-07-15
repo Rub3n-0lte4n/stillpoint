@@ -64,3 +64,7 @@ No accounts, no ads, no cookies. Your documents are read and parsed locally and 
 - **Content-Security-Policy** — a `<meta>` CSP restricts scripts and connections to `self` (plus the Google Fonts hosts for styles/fonts). All JavaScript is in external ES modules, so `script-src` does **not** allow `'unsafe-inline'`. (`style-src` still allows it for inline style attributes.)
 - **Untrusted document text** is HTML-escaped before rendering; EPUB content is parsed for text only (no script execution).
 - **Not settable on GitHub Pages**: HTTP response headers such as `Strict-Transport-Security` (github.io is HSTS-preloaded anyway) and `X-Frame-Options` / CSP `frame-ancestors` (ignored in `<meta>`) require a server. The app performs no sensitive actions, so clickjacking impact is negligible.
+
+## License
+
+MIT — see [LICENSE](LICENSE). The vendored libraries keep their own terms: [pdf.js](https://github.com/mozilla/pdf.js) is Apache-2.0, [JSZip](https://github.com/Stuk/jszip) is dual MIT/GPLv3, and the inlined haptics helper derives from [web-haptics](https://github.com/lochie/web-haptics) (MIT).
