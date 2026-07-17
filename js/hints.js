@@ -10,7 +10,8 @@ import { todayKey } from "./streak.js";
 // reader has been opened, so the drip spreads across days of use, not visits.
 export const HINTS = [
   { id:"zones",     minDay:1, touch:false, where:"reader",
-    text:"Swipe the reading area, or tap its edges, to step a sentence." },
+    text:"Swipe the reading area, or tap its edges, to step a sentence.",
+    pointerText:"Click the edges of the reading area to step a sentence." },
   { id:"speeddrag", minDay:2, touch:true,  where:"reader",
     text:"Drag up or down on the reading area to change speed." },
   { id:"holdmark",  minDay:3, touch:true,  where:"reader",

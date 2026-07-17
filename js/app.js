@@ -380,7 +380,9 @@ function maybeHint(where){
   const h = Hints.next({ where, libSize: loadLib().length });
   if(!h) return;
   Hints.markShown(h.id);
-  toast(h.text, { duration:7000, hint:true, action:"Guide", onAction:openGuide });
+  // a hint speaks the reader's input language: no "swipe" at a mouse
+  const touch = matchMedia("(hover:none)").matches;
+  toast((touch ? h.text : h.pointerText) || h.text, { duration:7000, hint:true, action:"Guide", onAction:openGuide });
 }
 // Reached the end — show the session summary.
 function finish(){
