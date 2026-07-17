@@ -56,7 +56,20 @@ const settings = { countdown:true, context:true, smartPacing:true, zen:true, mor
 /* keep the screen awake while streaming — phones otherwise dim and lock mid-chapter,
    because reading here never touches the screen */
 let wakeLock = null;
-async function acquireWakeLock(){ try{ if("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); }catch(e){} }
+async function acquireWakeLock(){
+  try{
+    if(!("wakeLock" in navigator)) return;
+    const lock = await navigator.wakeLock.request("screen");
+    if(!S.playing){ lock.release(); return; }   // paused while the request was in flight
+    wakeLock = lock;
+    // the OS may reclaim the lock on its own (backgrounding, battery saver);
+    // if the reader is still visibly streaming when it does, quietly take it back
+    lock.addEventListener("release", ()=>{
+      if(wakeLock===lock) wakeLock=null;
+      if(S.playing && !document.hidden) acquireWakeLock();
+    });
+  }catch(e){}
+}
 function releaseWakeLock(){ try{ if(wakeLock) wakeLock.release(); }catch(e){} wakeLock = null; }
 
 /* immersive reading: once the stream settles, fade the chrome so only the word remains.
@@ -1536,8 +1549,13 @@ function init(){
   $("doneAgain").onclick=()=>{ $("done").classList.remove("show"); S.index=0; S.readMs=0; play(); };
   $("doneLib").onclick=requestHome;
 
-  // auto-pause when the tab/window is hidden so you don't lose your place
-  document.addEventListener("visibilitychange",()=>{ if(document.hidden && S.playing) pause(); });
+  // auto-pause when the tab/window is hidden so you don't lose your place;
+  // returning to a still-playing reader re-arms the wake lock (the API drops
+  // it whenever the page hides, without telling the play/pause pair)
+  document.addEventListener("visibilitychange",()=>{
+    if(document.hidden){ if(S.playing) pause(); }
+    else if(S.playing && !wakeLock) acquireWakeLock();
+  });
 
   // Re-centre the ribbon when the viewport changes (rotation, split-screen, browser
   // chrome collapsing): its pixel offset comes from stage geometry, so a resize while
