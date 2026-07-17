@@ -404,6 +404,9 @@ function finish(){
     const left = Math.max(1, Math.ceil((sk.goalMin*60 - sk.todaySec)/60));
     $("doneStreak").textContent = `${left} more minute${left===1?"":"s"} today ${sk.current>0 ? "keeps the streak" : "starts a streak"}.`;
   }
+  // the review door only appears when something waits behind it
+  const hl = S.highlights.length, rv = $("doneReview");
+  if(rv){ rv.classList.toggle("hidden", hl===0); if(hl) rv.textContent = `Review ${hl} highlight${hl===1?"":"s"}`; }
   $("done").classList.add("show");
   $("doneLib").focus({preventScroll:true});   // move focus into the dialog
   maybeNudgeInstall();
