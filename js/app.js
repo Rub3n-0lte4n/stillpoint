@@ -751,6 +751,25 @@ function toast(msg, {action, onAction, duration=4500, error=false, hint=false}={
   return dismiss;
 }
 
+/* ---------------- last-resort error net ----------------
+   There is no server and no telemetry, so a crash on a reader's device is
+   otherwise invisible — the stream just freezes in silence. Surface one honest
+   toast (at most once a minute) and leave the details in the console, which is
+   what makes a bug report actionable. */
+let errNotedAt = 0;
+function noteFatal(){
+  const now = Date.now();
+  if(now - errNotedAt < 60000) return;
+  errNotedAt = now;
+  try{ toast("Something went wrong. If reading stops, reload the page.", {error:true, duration:8000}); }catch(e){}
+}
+window.addEventListener("error",(e)=>{
+  // cross-origin scripts surface as a bare "Script error." with nothing to act on
+  if(!e.message || (e.message==="Script error." && !e.filename)) return;
+  noteFatal();
+});
+window.addEventListener("unhandledrejection",()=>noteFatal());
+
 /* ---------------- reading streak (landing strip) ---------------- */
 // Hidden until there's anything to show (any ledger data or a non-empty library),
 // same gating spirit as #backup. Ring = today's minutes toward the daily goal.
