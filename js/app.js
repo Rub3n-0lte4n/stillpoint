@@ -910,9 +910,28 @@ function saveProgress(force){
   saveLib(lib);
 }
 let openLibRow=null;   // at most one row rests open on its Remove action
+// The landing leads with whatever the visitor came for. A returning reader
+// came for their book, so a non-empty shelf (and the streak beside it) moves
+// above the hero; the pitch keeps its place for first-timers. Moving the nodes
+// preserves their listeners, same trick as placeModeCtrl.
+function placeShelf(hasBooks){
+  const hero=document.querySelector("#landing .hero");
+  const recent=$("recent"), streak=$("streakStrip");
+  if(!hero || !recent || !streak) return;
+  if(hasBooks){
+    if(recent.nextElementSibling!==streak || streak.nextElementSibling!==hero){
+      hero.parentNode.insertBefore(recent, hero);
+      hero.parentNode.insertBefore(streak, hero);
+    }
+  } else {
+    const paste=document.querySelector("#landing .paste-shell");
+    if(paste && paste.nextElementSibling!==recent){ paste.after(recent); recent.after(streak); }
+  }
+}
 function renderLibrary(){
   const lib = loadLib();
   const box=$("recent"), list=$("recentList");
+  placeShelf(lib.length>0);
   // the backup panel only makes sense once there's a library to move
   $("backup").classList.toggle("hidden", lib.length===0);
   openLibRow=null;
