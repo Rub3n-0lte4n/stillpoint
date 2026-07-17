@@ -716,8 +716,10 @@
 
     /* ---- reading settings as a bottom sheet ---- */
     /* the opacity transition lets a released drag hand the scrim back smoothly */
-    .sheet-scrim{display:block;position:fixed;inset:0;z-index:71;background:rgba(5,3,8,0.6);
-      -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);transition:opacity var(--t) var(--ease-out);}
+    /* the ground is already near-black, so isolation comes from the blur as
+       much as the alpha — 3px read as no scrim at all over a dark stage */
+    .sheet-scrim{display:block;position:fixed;inset:0;z-index:71;background:rgba(5,3,8,0.72);
+      -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:opacity var(--t) var(--ease-out);}
     .more-wrap{
       display:block;position:fixed;left:0;right:0;bottom:0;z-index:72;
       background:rgba(14,9,24,0.94);-webkit-backdrop-filter:blur(20px) saturate(1.5);backdrop-filter:blur(20px) saturate(1.5);
@@ -746,7 +748,7 @@
     .sheet-grab::after{content:"";position:absolute;inset:-16px -60px;}   /* swipe hit area */
 
     /* ---- contents panel as a bottom sheet ---- */
-    .toc-scrim{background:rgba(5,3,8,0.6);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);z-index:73;
+    .toc-scrim{background:rgba(5,3,8,0.72);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);z-index:73;
       transition:opacity var(--t) var(--ease-out);}
     .toc{
       position:fixed;left:0;right:0;bottom:0;top:auto;z-index:74;width:auto;

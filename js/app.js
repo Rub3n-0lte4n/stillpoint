@@ -1433,12 +1433,36 @@ function placeModeCtrl(){
     wrap.removeAttribute("role"); wrap.removeAttribute("aria-modal"); wrap.removeAttribute("aria-label");
   }
 }
+// On phones the sheets and their scrims move OUT of the glass chrome: backdrop
+// blur makes .dock and .reader-top the containing block for fixed children, so
+// a scrim meant to cover the viewport only ever covered its parent's box (the
+// stage above the settings sheet was never dimmed at all). Same reparenting
+// idiom as placeModeCtrl; desktop puts everything back home, because the toc
+// popover anchors to the top bar and the settings panel expands inline.
+let sheetHomes=null;
+function placeSheets(){
+  const toc=$("toc"), tocScrim=$("tocScrim"), wrap=$("moreWrap"), scrim=$("sheetScrim");
+  if(!sheetHomes) sheetHomes={
+    toc:{p:toc.parentNode,n:toc.nextSibling}, tocScrim:{p:tocScrim.parentNode,n:tocScrim.nextSibling},
+    wrap:{p:wrap.parentNode,n:wrap.nextSibling}, scrim:{p:scrim.parentNode,n:scrim.nextSibling},
+  };
+  if(isSheet()){
+    document.body.append(tocScrim, toc, scrim, wrap);
+  } else {
+    // anchors that never move first (toc, wrap), then the scrims whose anchors they are
+    sheetHomes.toc.p.insertBefore(toc, sheetHomes.toc.n);
+    sheetHomes.tocScrim.p.insertBefore(tocScrim, sheetHomes.tocScrim.n);
+    sheetHomes.wrap.p.insertBefore(wrap, sheetHomes.wrap.n);
+    sheetHomes.scrim.p.insertBefore(scrim, sheetHomes.scrim.n);
+  }
+}
 sheetMq.addEventListener("change",()=>{
   // crossing into phone width with the panel expanded would flash a surprise
   // modal — start closed instead
   if(isSheet() && $("moreWrap").classList.contains("open")) setSettingsOpen(false);
   $("sheetScrim").hidden = !(isSheet() && $("moreWrap").classList.contains("open"));
   placeModeCtrl();
+  placeSheets();
 });
 
 /* ---------------- patron + reading themes ----------------
@@ -1749,6 +1773,7 @@ function init(){
   wireSheet($("toc"), $("tocScrim"), closeToc);
   wireSheet($("moreWrap"), $("sheetScrim"), ()=>setSettingsOpen(false));
   placeModeCtrl();
+  placeSheets();
 
   // daily goal stepper on the streak strip
   const stepGoal=(d)=>()=>{ Streak.setGoal(Streak.getState().goalMin+d); renderStreak(); };
