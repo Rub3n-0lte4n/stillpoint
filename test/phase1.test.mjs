@@ -81,6 +81,12 @@ ok(!/javascript:/i.test(clean), "sanitize strips javascript: URLs");
 ok(!/onmouseover/i.test(clean), "sanitize strips on* handlers");
 ok(!/<style/i.test(clean), "sanitize strips <style>");
 
+const embeds = new DOMParser().parseFromString(
+  `<!doctype html><html><body><div id="d"><iframe src="https://x.test"></iframe><object data="a"></object><embed src="b"><form action="/steal"><input></form><base href="https://x.test/"><meta http-equiv="refresh" content="0"><img src="ok.png" alt="fig"><table><tr><td>1</td></tr></table></div></body></html>`, "text/html");
+const cleaned = sanitizeHTML(embeds.querySelector("#d"));
+ok(!/<(iframe|object|embed|form|base|meta)/i.test(cleaned), "sanitize strips embedding/form/base/meta elements");
+ok(/<img[^>]*src="ok.png"/i.test(cleaned) && /<table/i.test(cleaned), "sanitize keeps images and tables (the point of block capture)");
+
 /* ---------- PDF table heuristic ---------- */
 const grid = [];
 for (const y of [300, 288, 276]) for (const x of [50, 150]) grid.push({ str: "ab", transform: [1,0,0,1,x,y], width: 20, height: 10 });

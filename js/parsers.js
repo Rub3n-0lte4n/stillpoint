@@ -31,12 +31,25 @@ const EPUB_BLOCK_BREAK = new Set([
 
 /* ---------------- shared helpers ---------------- */
 
-// Strip script/style, on* handlers, and javascript: URLs from captured EPUB markup
-// before it is ever stored. Operates on a clone so the live DOM is untouched.
+// Parsing runs on the main thread (DOMParser doesn't exist in workers), so it
+// breathes on a time budget: yield whenever ~24ms of work has accumulated.
+// The old every-N-items yields could hold the thread for hundreds of ms when
+// N dense pages or minified sections landed in one batch.
+function timeBudget(ms = 24){
+  let last = Date.now();
+  return async ()=>{ if(Date.now()-last >= ms){ await new Promise(r=>setTimeout(r)); last = Date.now(); } };
+}
+
+// Strip active/embedding elements, on* handlers, and javascript: URLs from
+// captured EPUB markup before it is ever stored. A book is untrusted input:
+// beyond script/style, anything that could frame another origin, submit a
+// form, or rewrite the document's base URL goes too (CSP is the backstop, not
+// the only wall). Operates on a clone so the live DOM is untouched.
 // Exported for tests.
+const STRIP_TAGS = "script,style,iframe,frame,frameset,object,embed,form,link,meta,base,applet";
 export function sanitizeHTML(el){
   const clone = el.cloneNode(true);
-  if(clone.querySelectorAll) clone.querySelectorAll("script,style").forEach(n=>n.remove());
+  if(clone.querySelectorAll) clone.querySelectorAll(STRIP_TAGS).forEach(n=>n.remove());
   const nodes = clone.querySelectorAll ? [clone, ...clone.querySelectorAll("*")] : [clone];
   for(const node of nodes){
     if(!node.attributes) continue;
@@ -56,6 +69,7 @@ export async function parsePDF(file, onProgress = ()=>{}){
   // isEvalSupported:false mitigates CVE-2024-4367 (arbitrary JS via crafted PDF font handling)
   const pdf = await pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
   const tokens = []; const units = []; const blocks = [];
+  const breathe = timeBudget();
   for(let p=1; p<=pdf.numPages; p++){
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
@@ -77,7 +91,7 @@ export async function parsePDF(file, onProgress = ()=>{}){
       }
     }catch(e){ /* snapshot extraction failed — prose tokens already captured, read on */ }
     onProgress(p / pdf.numPages);
-    if(p % 5 === 0) await new Promise(r=>setTimeout(r)); // yield to keep UI responsive
+    await breathe();
   }
   if(tokens.length===0) throw new Error("This PDF has no extractable text (it may be scanned images).");
   // Declared contents: the PDF outline (bookmarks) — what Apple Books lists.
@@ -439,6 +453,7 @@ export async function parseEPUB(file, onProgress = ()=>{}){
 
   const tokens=[]; const units=[]; const blocks=[]; let chapters=0;
   const sectionMap={};   // normalized zip path → { start, anchors } for the declared ToC
+  const breathe = timeBudget();
   for(let i=0;i<itemrefs.length;i++){
     const href = manifest[itemrefs[i].getAttribute("idref")];
     if(href){
@@ -471,7 +486,7 @@ export async function parseEPUB(file, onProgress = ()=>{}){
       }catch(e){ /* skip unreadable section */ }
     }
     onProgress((i+1) / Math.max(1, itemrefs.length));
-    if(i % 4 === 0) await new Promise(r=>setTimeout(r));
+    await breathe();
   }
   if(tokens.length===0) throw new Error("Couldn't extract readable text from this EPUB. It may be image-only (scanned) or DRM-protected.");
   let nav=null;
