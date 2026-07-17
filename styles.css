@@ -172,7 +172,11 @@
     transition:border-color var(--t) var(--ease-out), transform var(--t) var(--ease-out), background var(--t) var(--ease-out), box-shadow var(--t) var(--ease-out);
   }
   .tier:hover{border-color:var(--gold);transform:translateY(-3px);background:var(--surface-2);box-shadow:var(--e-1), 0 16px 32px -16px rgba(230,197,135,0.55);}
-  .tier .emoji{font-size:24px;line-height:1;}
+  /* drawn glyphs, not emoji: the one corner of the page outside the icon
+     language was the one asking for money */
+  .tier .tier-ico{line-height:0;}
+  .tier .tier-ico svg{width:24px;height:24px;fill:var(--gold);opacity:.85;transition:opacity var(--t) var(--ease-out);}
+  .tier:hover .tier-ico svg{opacity:1;}
   .tier .tier-label{font-size:13px;color:var(--ink-soft);margin-top:5px;}
   .tier .tier-amt{font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:19px;color:var(--gold);margin-top:1px;}
   .tier.custom{flex-direction:row;align-items:center;justify-content:center;min-width:auto;background:transparent;border:none;color:var(--ink-soft);font-size:13.5px;padding:14px 10px;}
