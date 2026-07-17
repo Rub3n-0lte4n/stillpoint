@@ -284,7 +284,7 @@ function pause(){
   $("ribbon").classList.remove("playing");   // brighten neighbours for orientation while paused
   $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
   $("playBtn").setAttribute("aria-label","Play");
-  saveProgress();
+  saveProgress(true);
 }
 function toggle(){
   if(S.cardOpen){ resumeFromCard(); return; }
@@ -360,7 +360,7 @@ function nudgeWpm(v){ setWpm(Math.min(800, Math.max(150, v))); showSpeedGhost(S.
 
 function jumpTo(i){
   S.index = Math.max(0, Math.min(i, S.tokens.length-1));
-  render(); updateProgress(); saveProgress();
+  render(); updateProgress(); saveProgress(true);
 }
 // The chevron only ghosts in when the position truly moved — at the first or
 // last sentence nothing happens, and the stage honestly shows nothing.
@@ -766,9 +766,21 @@ function renderStreak(){
 /* ---------------- resume / library (localStorage) ---------------- */
 const LIB_KEY="fp_library_v1";
 function loadLib(){ try{return JSON.parse(localStorage.getItem(LIB_KEY))||[];}catch(e){return [];} }
-function saveLib(lib){ localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0,8))); }
-function saveProgress(){
+let libSaveFailed=false;   // full storage would otherwise toast on every save
+function saveLib(lib){
+  try{ localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0,8))); libSaveFailed=false; }
+  catch(e){
+    if(!libSaveFailed){ libSaveFailed=true; toast("Storage on this device is full, so your reading position can't be saved.", {error:true}); }
+  }
+}
+// The stream calls this every chunk; a full library serialize per word is waste,
+// so streaming saves are paced. Anything that ends or moves a session (pause,
+// jumps, opening a book, leaving the page) forces a write so resume stays exact.
+let progressSavedAt=0;
+function saveProgress(force){
   if(!S.key) return;
+  if(!force && Date.now()-progressSavedAt<2000) return;
+  progressSavedAt=Date.now();
   const lib = loadLib().filter(x=>x.key!==S.key);
   lib.unshift({key:S.key,title:S.title,type:S.meta.split(" ")[0]||"TEXT",index:S.index,total:S.tokens.length,ts:Date.now()});
   saveLib(lib);
@@ -901,7 +913,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   updateProgress();
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden"); $("ribbon").classList.add("hidden");
   $("playBtn").focus({preventScroll:true});   // move focus into the reader (route-change focus)
-  saveProgress(); // record the entry immediately so the recent library reflects it
+  saveProgress(true); // record the entry immediately so the recent library reflects it
   Hints.readerOpened();
 }
 
@@ -1711,7 +1723,8 @@ function init(){
   const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,zen:settings.zen,moreOpen:settings.moreOpen,theme})); }catch(e){} };
   window.addEventListener("beforeunload",savePrefs);
   // a killed tab mid-play still credits the segment to the streak ledger
-  window.addEventListener("pagehide",()=>{ settleReading(); savePrefs(); });
+  // (and gets its exact position written past the streaming-save pacing)
+  window.addEventListener("pagehide",()=>{ settleReading(); saveProgress(true); savePrefs(); });
   document.addEventListener("visibilitychange",()=>{ if(document.hidden) savePrefs(); });
 }
 
