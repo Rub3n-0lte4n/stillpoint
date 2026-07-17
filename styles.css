@@ -518,6 +518,23 @@
   .seg button{font-family:inherit;font-size:13px;color:var(--ink-soft);background:none;border:none;padding:8px 14px;cursor:pointer;transition:all var(--t-fast) var(--ease-out);}
   .seg button.active{background:linear-gradient(135deg,var(--amethyst-deep),var(--amethyst));color:#fff;box-shadow:0 2px 10px -2px rgba(139,92,246,0.5), inset 0 1px 0 rgba(255,255,255,0.2);}
   .seg button:not(.active):hover{color:var(--ink);}
+  /* Multi-select seg: the aids are independent switches, not one choice. The
+     connected pill reads as a radio row, so these break into separate chips,
+     each wearing a state dot — hollow off, filled on. */
+  .seg.multi{background:none;border:none;box-shadow:none;overflow:visible;gap:6px;}
+  .seg.multi button{
+    border:1px solid var(--hair);border-radius:999px;background:var(--surface-inset);
+    display:inline-flex;align-items:center;gap:7px;
+  }
+  .seg.multi button::before{
+    content:"";width:6px;height:6px;border-radius:50%;flex:none;
+    border:1px solid currentColor;opacity:.45;
+    transition:opacity var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+  }
+  .seg.multi button.active::before{background:currentColor;opacity:1;}
+  /* equal specificity, later in file: restate the active fill so separated
+     chips keep the app-wide "on = amethyst" state language */
+  .seg.multi button.active{background:linear-gradient(135deg,var(--amethyst-deep),var(--amethyst));}
 
   .slider-ctrl{min-width:180px;}
   .slider-row{display:flex;align-items:center;gap:10px;}
@@ -706,6 +723,7 @@
     .controls.more .ctrl{width:100%;}
     .controls.more .seg{width:100%;border-radius:16px;}
     .controls.more .seg button{flex:1 1 auto;padding:14px 8px;font-size:14px;}
+    .controls.more .seg.multi button{flex:1 1 40%;}   /* four switches settle 2x2, no lone stretched chip */
     .sheet-head{display:flex;flex-direction:column;align-items:center;gap:12px;position:relative;padding:2px 0 0;flex:none;}
     .sheet-title{font-size:11px;letter-spacing:2.2px;text-transform:uppercase;color:var(--ink-mute);}
     .sheet-done{position:absolute;right:0;top:8px;font:inherit;font-size:13px;font-weight:600;color:var(--gold);
