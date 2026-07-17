@@ -1365,11 +1365,13 @@ async function importBackup(file){
 function setMode(m){
   S.mode=m;
   document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
+  // ORP reads one word by definition, so the chunk control leaves the panel
+  // entirely — dimmed-but-selected was the most ambiguous state in the sheet
   const chunkCtrl=$("chunkCtrl");
-  if(m==="orp"){ S.chunk=1; chunkCtrl.style.opacity=.4; chunkCtrl.style.pointerEvents="none"; setChunkUI(1); }
-  else if(m==="hybrid"){ if(S.chunk<2) S.chunk=3; chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; setChunkUI(S.chunk);
+  if(m==="orp"){ S.chunk=1; chunkCtrl.classList.add("hidden"); setChunkUI(1); }
+  else if(m==="hybrid"){ if(S.chunk<2) S.chunk=3; chunkCtrl.classList.remove("hidden"); setChunkUI(S.chunk);
     document.querySelector('#chunkSeg button[data-c="1"]').style.display="none"; }
-  else { chunkCtrl.style.opacity=1; chunkCtrl.style.pointerEvents="auto"; document.querySelector('#chunkSeg button[data-c="1"]').style.display=""; setChunkUI(S.chunk); }
+  else { chunkCtrl.classList.remove("hidden"); document.querySelector('#chunkSeg button[data-c="1"]').style.display=""; setChunkUI(S.chunk); }
   if(!$("ribbon").classList.contains("hidden")) render();   // re-centre if currently showing
 }
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
