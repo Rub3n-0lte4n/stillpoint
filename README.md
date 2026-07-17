@@ -43,6 +43,7 @@ js/store.js       IndexedDB persistence
 js/streak.js      daily goal + streak ledger
 js/gestures.js    stage gesture recognizer
 js/hints.js       progressive hints ledger (feeds the Guide)
+js/library.js     library-list rules (merge on import, shelf cap)
 js/haptics.js     vendored web-haptics (Vibration API + iOS switch trick)
 js/patron.js      patron unlock + reading themes
 js/vendor/        pdf.js and JSZip, vendored (no CDN)

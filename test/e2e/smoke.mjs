@@ -192,6 +192,12 @@ async function main() {
     ok(await A.waitFor(`navigator.serviceWorker.getRegistration().then(r=>!!r)`, 12000), "service worker registered");
     await A.goto(BASE);
     ok(await A.waitFor(`document.querySelectorAll("#recentList .recent-item").length >= 1`), "library remembers the session after reload");
+    // this reloaded page is SW-controlled, so a controller change means "newer
+    // version took over" — simulate it and expect the reload offer
+    await A.waitFor(`!!navigator.serviceWorker.controller`, 12000);
+    await A.evalIn(`navigator.serviceWorker.dispatchEvent(new Event("controllerchange")); true`);
+    ok(await A.waitFor(`[...document.querySelectorAll(".toast")].some(t=>t.textContent.includes("newer Stillpoint"))`),
+      "a new service worker taking over offers a reload");
     ok(A.consoleErrors.length === 0, "no console errors in flow A", A.consoleErrors.join(" | ").slice(0, 300));
 
     /* ----- flow B: localStorage full on the hot path ----- */

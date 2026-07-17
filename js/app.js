@@ -9,6 +9,7 @@ import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js"
 import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
 import { stageGestures, sheetDrag, rowSwipe } from "./gestures.js";
 import { Hints } from "./hints.js";
+import { mergeLibrary, LIB_MAX } from "./library.js";
 
 const BASE_TITLE = document.title;   // restored when leaving the reader
 
@@ -365,6 +366,7 @@ function pause(){
   $("playIcon").innerHTML = '<path d="M8 5v14l11-7z"/>';
   $("playBtn").setAttribute("aria-label","Play");
   saveProgress(true);
+  maybeUpdateToast();   // an update that arrived mid-stream waited for this pause
 }
 function toggle(){
   if(S.cardOpen){ resumeFromCard(); return; }
@@ -847,6 +849,19 @@ window.addEventListener("error",(e)=>{
 });
 window.addEventListener("unhandledrejection",()=>noteFatal());
 
+/* The service worker activates new versions immediately (skipWaiting), but a
+   running page keeps its old code until a reload — installed-PWA readers could
+   sit on a stale version forever without ever knowing. Offer the reload once,
+   and never over the stream: a mid-word toast would break the one promise the
+   stage makes. */
+let updatePending = false, updateNoted = false;
+function maybeUpdateToast(){
+  if(!updatePending || updateNoted || S.playing) return;
+  updateNoted = true;
+  toast("A newer Stillpoint is ready.", { action:"Reload", duration:10000, onAction:()=>location.reload() });
+}
+function noteUpdate(){ updatePending = true; maybeUpdateToast(); }
+
 /* ---------------- reading streak (landing strip) ---------------- */
 // Hidden until there's anything to show (any ledger data or a non-empty library),
 // same gating spirit as #backup. Ring = today's minutes toward the daily goal.
@@ -877,7 +892,7 @@ const LIB_KEY="fp_library_v1";
 function loadLib(){ try{return JSON.parse(localStorage.getItem(LIB_KEY))||[];}catch(e){return [];} }
 let libSaveFailed=false;   // full storage would otherwise toast on every save
 function saveLib(lib){
-  try{ localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0,8))); libSaveFailed=false; }
+  try{ localStorage.setItem(LIB_KEY, JSON.stringify(lib.slice(0,LIB_MAX))); libSaveFailed=false; }
   catch(e){
     if(!libSaveFailed){ libSaveFailed=true; toast("Storage on this device is full, so your reading position can't be saved.", {error:true}); }
   }
@@ -1300,13 +1315,7 @@ async function importBackup(file){
       }catch(e){ /* skip one unreadable entry, keep the rest */ }
     }
     // Merge the library, keeping the most-recently-read entry per book (syncs progress).
-    const byKey = new Map();
-    for(const it of loadLib()) byKey.set(it.key, it);
-    for(const it of data.library){
-      const ex = byKey.get(it.key);
-      if(!ex || (it.ts||0) > (ex.ts||0)) byKey.set(it.key, it);
-    }
-    saveLib([...byKey.values()].sort((a,b)=>(b.ts||0)-(a.ts||0)));
+    saveLib(mergeLibrary(loadLib(), data.library));
     // Restore per-document block-presentation modes + highlights alongside the books.
     if(data.blockModes){ for(const [k,v] of Object.entries(data.blockModes)){ try{ await Store.putBlockMode(k, v); }catch(e){} } }
     if(data.highlights){ for(const [k,v] of Object.entries(data.highlights)){ try{ await Store.putHighlights(k, v); }catch(e){} } }
@@ -1865,5 +1874,12 @@ else init();
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
     navigator.serviceWorker.register("sw.js").catch(()=>{ /* offline mode unavailable; app still works online */ });
+    // A controller change while this page is already controlled means a newer
+    // version took over; the very first install claiming the page is not news.
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      if(!hadController){ hadController = true; return; }
+      noteUpdate();
+    });
   });
 }
