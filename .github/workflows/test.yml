@@ -1,0 +1,22 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install
+      - name: Unit tests
+        run: npm test
+      - name: Shell cache version matches content
+        run: npm run sw:check
+      - name: Browser smoke (headless Chrome)
+        run: npm run test:e2e
