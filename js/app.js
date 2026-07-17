@@ -100,6 +100,15 @@ function maybeNudgeInstall(){
    focal point and held STILL for its whole dwell (no sliding) so it stays readable
    at speed; dim neighbours sit on either side for context, refreshing in place. */
 let ribbonStart = 0, ribbonLast = -1, ribbonOffset = 0;
+// Geometry cache, filled once per rebuilt window (and again after resize or a
+// size change): per word, at the base font size, the left edge, full width,
+// prefix left/width, and the pivot letter's width both plain and BOLD (bolding
+// the pivot is the one thing that changes metrics). Every tick then places the
+// ribbon with arithmetic and a transform write — the old path forced a
+// synchronous reflow per word (fontSize reset + getBoundingClientRect).
+let G = null;
+let ribbonScaled = false;   // fontSize currently shrunk by the legacy fit path
+function invalidateRibbon(){ G = null; ribbonLast = -1; }
 
 function buildRibbon(){
   const start = Math.max(0, S.index - 4);
@@ -111,24 +120,83 @@ function buildRibbon(){
             `<span class="rpiv">${esc(w[oi]||"")}</span><span class="rpost">${esc(w.slice(oi+1))}</span></span>`;
   }
   const rb=$("ribbon"); rb.innerHTML=html; ribbonStart=start; ribbonLast=end;
+  measureRibbon();
+}
+// Two measurement passes per rebuild: plain, then with every pivot letter bold
+// (the `mb` class). Bold width per word is position-independent, so the two
+// passes are enough to place ANY marking state exactly, without ever measuring
+// again inside the hot loop.
+function measureRibbon(){
+  const rb=$("ribbon"), stage=$("stage");
+  rb.style.fontSize="";                                  // measure at the base size
+  rb.style.transform="translate(0px, -50%)";             // a known frame for the maths
+  ribbonOffset = 0; ribbonScaled = false;
+  const els=[...rb.children];
+  const rbRect = rb.getBoundingClientRect();             // pass 1 (plain)
+  const left=[], w=[], preL=[], wPre=[], wPiv=[];
+  for(const el of els){
+    const r=el.getBoundingClientRect();
+    left.push(r.left-rbRect.left); w.push(r.width);
+    const pr=el.firstChild.getBoundingClientRect();
+    preL.push(pr.left-rbRect.left); wPre.push(pr.width);
+    wPiv.push(el.children[1].getBoundingClientRect().width);
+  }
+  rb.classList.add("mb");
+  const wPivB = els.map(el=>el.children[1].getBoundingClientRect().width);  // pass 2 (bold)
+  rb.classList.remove("mb");
+  const sr = stage.getBoundingClientRect();
+  G = { els, left, w, preL, wPre, wPiv, wPivB, marked:[],
+        l0: rbRect.left, stageC: sr.left + sr.width/2, avail: stage.clientWidth*0.9 };
+}
+// Pure placement from the cache. ORP: the current word's bold pivot centre on
+// the stage centre. RSVP/Hybrid: the chunk as an optical block (Hybrid's bold
+// pivots widen it — the widths are known, so the edges are computed, not read).
+function placeRibbon(){
+  if(!G) return;
+  const rb=$("ribbon");
+  const i0 = S.index - ribbonStart;
+  if(i0<0 || i0>=G.left.length) return;
+  let anchorRel, width;
+  if(S.mode==="orp"){
+    anchorRel = G.preL[i0] + G.wPre[i0] + G.wPivB[i0]/2;
+    width = G.w[i0] + (G.wPivB[i0]-G.wPiv[i0]);
+  } else {
+    const last = Math.min(S.index+S.chunk, S.tokens.length) - ribbonStart - 1;
+    const lastC = Math.min(last, G.left.length-1);
+    let shift = 0;
+    if(S.mode==="hybrid") for(let k=i0;k<lastC;k++) shift += G.wPivB[k]-G.wPiv[k];
+    const lastW = S.mode==="hybrid" ? G.w[lastC] + (G.wPivB[lastC]-G.wPiv[lastC]) : G.w[lastC];
+    const lo = G.left[i0], hi = G.left[lastC] + shift + lastW;
+    anchorRel = (lo+hi)/2;
+    width = hi-lo;
+  }
+  // rare overflow (a long word on a narrow phone): the legacy measured path
+  // still handles the shrink, exactly as before
+  if(width > G.avail){ fitRibbon(); centerRibbon(); ribbonScaled = !!rb.style.fontSize; return; }
+  if(ribbonScaled){ rb.style.fontSize=""; ribbonScaled=false; }
+  const target = Math.round((G.stageC - G.l0 - anchorRel)*100)/100;
+  rb.style.transform = `translate(${target}px, -50%)`;
+  ribbonOffset = target;
 }
 // Mark the current chunk. ORP anchors the focal word's pivot letter; Hybrid
 // gives EVERY word in the phrase its own amber anchor (landing points for the
 // eye's hops); RSVP stays unaccented. Classes go on before fitRibbon measures,
 // so the bold anchors are part of the measured width.
 function markChunk(){
-  const rb=$("ribbon");
-  rb.querySelectorAll(".rw.on, .rw.pivot").forEach(e=>e.classList.remove("on","pivot"));
+  if(!G) return;
+  for(const el of G.marked) el.classList.remove("on","pivot");
+  G.marked.length = 0;
   const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
   for(let k=S.index;k<endChunk;k++){
-    const el=rb.querySelector(`.rw[data-i="${k}"]`);
+    const el=G.els[k-ribbonStart];
     if(!el) continue;
     el.classList.add("on");
     if(S.mode==="hybrid") el.classList.add("pivot");
+    G.marked.push(el);
   }
   if(S.mode==="orp"){
-    const pw=rb.querySelector(`.rw[data-i="${S.index}"]`);
-    if(pw) pw.classList.add("pivot");
+    const pw=G.els[S.index-ribbonStart];
+    if(pw && !pw.classList.contains("pivot")){ pw.classList.add("pivot"); if(!G.marked.includes(pw)) G.marked.push(pw); }
   }
 }
 // Snap the ribbon into place — INSTANT (no slide), so the text is stationary
@@ -195,8 +263,7 @@ function render(){
   rb.classList.toggle("playing", S.playing);
   if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2) buildRibbon();
   markChunk();
-  fitRibbon();
-  centerRibbon();
+  placeRibbon();
 }
 
 /* ---------------- playback loop ---------------- */
@@ -224,7 +291,7 @@ function step(){
 
   const prev = S.index;
   S.index += S.chunk;
-  updateProgress();
+  updateProgress(true);
   saveProgress();
 
   // Phase 2: did the chunk we just consumed cross blocks? Cheap no-op for prose.
@@ -651,6 +718,7 @@ function highlightAt(i){ return S.highlights.some(r=> r.start<=i && i<=r.end); }
 function updateMarkBtn(){
   const b=$("markBtn"); if(!b) return;
   const on = highlightAt(S.index);
+  if(b.classList.contains("on")===on) return;   // no-op writes still dirty style — skip them
   b.classList.toggle("on", on);
   b.setAttribute("aria-pressed", on?"true":"false");
 }
@@ -687,19 +755,28 @@ function exportHighlights(){
 
 /* ---------------- progress + scrubber ---------------- */
 function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
-function updateProgress(){
+let progressPaintAt=0;
+// `throttled` comes only from the streaming loop: the scrubber repaint is a
+// real layout per write, and a hairline moving 5x a second reads identically
+// to one moving per word. Everything else (scrub drags, jumps, pause paths)
+// paints immediately. Chapter crossings and their side effects run every call.
+function updateProgress(throttled){
   const total = S.tokens.length||1;
   const grid = (S.chapters && S.chapters.length) ? S.chapters : [{title:null,start:0,end:total}];
   const k = chapterAt(grid, S.index);
   const seg = grid[k];
   const span = Math.max(1, seg.end - seg.start);
   const pct = Math.min(100, ((S.index - seg.start)/span)*100);
-  $("trackFill").style.width = pct+"%";
-  $("trackKnob").style.left = pct+"%";
-  const tk=$("track"); tk.setAttribute("aria-valuenow", Math.round(pct));
-  tk.setAttribute("aria-valuetext", Math.round(pct) + (seg.title ? "% of "+seg.title : "% read"));
-  $("tElapsed").textContent = fmt((S.index - seg.start)/S.wpm*60);
-  $("tLeft").textContent = "-"+fmt((seg.end - S.index)/S.wpm*60);
+  const now = Date.now();
+  if(!throttled || now-progressPaintAt>200 || k!==S.curCh){
+    progressPaintAt = now;
+    $("trackFill").style.width = pct+"%";
+    $("trackKnob").style.left = pct+"%";
+    const tk=$("track"); tk.setAttribute("aria-valuenow", Math.round(pct));
+    tk.setAttribute("aria-valuetext", Math.round(pct) + (seg.title ? "% of "+seg.title : "% read"));
+    $("tElapsed").textContent = fmt((S.index - seg.start)/S.wpm*60);
+    $("tLeft").textContent = "-"+fmt((seg.end - S.index)/S.wpm*60);
+  }
   // the top-right meta line names the chapter the bar describes (book-scope
   // documents keep the static parse meta: "EPUB · 12 chapters · 84,120 words")
   if(k !== S.curCh){ S.curCh = k; $("docMeta").textContent = seg.title || S.meta; }
@@ -941,7 +1018,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   $("landing").style.display="none";
   $("reader").classList.add("show");
   if(!(history.state && history.state.sp==="reader")) history.pushState({sp:"reader"}, "");  // so Back returns to the library
-  ribbonStart=0; ribbonLast=-1; ribbonOffset=0;   // reset the ribbon for the new document
+  ribbonStart=0; ribbonOffset=0; invalidateRibbon();   // reset the ribbon for the new document
   updateProgress();
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden"); $("ribbon").classList.add("hidden");
   $("playBtn").focus({preventScroll:true});   // move focus into the reader (route-change focus)
@@ -1276,6 +1353,7 @@ function setWpm(v){
 }
 function setSize(s){ S.size=s; document.documentElement.style.setProperty("--read-size",s+"px");
   document.querySelectorAll("#sizeSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.s===s));
+  invalidateRibbon();   // cached metrics were taken at the old size
   if(!$("ribbon").classList.contains("hidden")) render();   // re-centre at the new size
 }
 function applyAids(){
@@ -1594,6 +1672,7 @@ function init(){
   const onViewportChange=()=>{
     clearTimeout(rzTimer);
     rzTimer=setTimeout(()=>{
+      invalidateRibbon();   // stage geometry moved under the cached measurements
       if($("reader").classList.contains("show") && !$("ribbon").classList.contains("hidden")) render();
     },120);
   };
@@ -1756,6 +1835,9 @@ function init(){
   buildThemeSeg();
 
   renderLibrary(); renderStreak();
+
+  // a display font arriving after first measure would poison the ribbon cache
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>invalidateRibbon()).catch(()=>{});
 
   // A file shared into the PWA (Web Share Target) is stashed by the service worker
   // under shared::pending; pick it up, clean the URL, and open it like any upload.

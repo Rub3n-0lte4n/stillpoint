@@ -170,6 +170,22 @@ async function main() {
     ok(i2 > i1, "the stream advances", `${i1} -> ${i2}`);
     await A.evalIn(`document.getElementById("playBtn").click();`);
     ok(await A.waitFor(`document.getElementById("playBtn").getAttribute("aria-label")==="Play"`), "pause returns the transport to Play");
+    // chunk modes centre the phrase as an optical block; measure it paused, per mode
+    const blockDrift = (mode, chunk) => A.evalIn(`(async()=>{
+      document.querySelector('#modeSeg button[data-mode="${mode}"]').click();
+      const cb=document.querySelector('#chunkSeg button[data-c="${chunk}"]'); if(cb) cb.click();
+      await new Promise(r=>setTimeout(r,150));
+      const els=[...document.querySelectorAll(".rw.on")];
+      if(!els.length) return -1;
+      const lo=Math.min(...els.map(e=>e.getBoundingClientRect().left));
+      const hi=Math.max(...els.map(e=>e.getBoundingClientRect().right));
+      const s=document.getElementById("stage").getBoundingClientRect();
+      return Math.abs((lo+hi)/2-(s.left+s.width/2));})()`);
+    const dRsvp = await blockDrift("rsvp", 3);
+    ok(dRsvp >= 0 && dRsvp < 0.6, "RSVP phrase centred as a block", `drift ${dRsvp}px`);
+    const dHyb = await blockDrift("hybrid", 3);
+    ok(dHyb >= 0 && dHyb < 0.6, "Hybrid phrase centred with its bold anchors", `drift ${dHyb}px`);
+    await A.evalIn(`document.querySelector('#modeSeg button[data-mode="orp"]').click(); true`);
     await A.evalIn(`setTimeout(()=>{ throw new Error("e2e-probe"); }, 0); true`);
     ok(await A.waitFor(`[...document.querySelectorAll(".toast.err")].some(t=>t.textContent.includes("Something went wrong"))`),
       "an uncaught error surfaces the last-resort toast");
