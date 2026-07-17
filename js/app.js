@@ -931,9 +931,19 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
 }
 
 /* ---------------- local file cache (IndexedDB) ---------------- */
+// The library lives ONLY on this device — that's the whole promise — so ask the
+// browser to treat the origin's storage as durable the first time a book is
+// kept. Without this it may silently evict the IndexedDB under storage pressure
+// and empty the shelf. Best effort: refusal is fine and changes nothing visible.
+let durableAsked = false;
+function requestDurableStorage(){
+  if(durableAsked) return;
+  durableAsked = true;
+  try{ navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(()=>{}); }catch(e){}
+}
 // Persist a file/text so it can be reopened later without re-uploading; keep IDB in sync with the library.
 async function persist(key, rec){
-  try{ await Store.put(key, rec); await pruneStore(); }
+  try{ await Store.put(key, rec); requestDurableStorage(); await pruneStore(); }
   catch(e){ /* storage unavailable or over quota — non-fatal, file just won't be remembered */ }
 }
 async function pruneStore(){
@@ -1184,6 +1194,7 @@ async function importBackup(file){
   }
   showParse("Importing your library…","Restoring books and positions");
   try{
+    requestDurableStorage();   // a restored shelf deserves the same eviction protection
     let restored=0;
     for(const f of (data.files||[])){
       try{
