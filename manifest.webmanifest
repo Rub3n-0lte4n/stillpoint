@@ -2,7 +2,9 @@
   "name": "Stillpoint · Couture Reader",
   "short_name": "Stillpoint",
   "description": "Stream any PDF or EPUB through a single focal point. A calm, private speed-reader that runs entirely in your browser.",
-  "id": "/stillpoint/",
+  "id": "/",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -24,5 +26,9 @@
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
     { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ],
+  "screenshots": [
+    { "src": "screenshot-wide-1.jpg", "sizes": "1280x811", "type": "image/jpeg", "form_factor": "wide", "label": "The landing page: drop a book, pick up where you left off" },
+    { "src": "screenshot-wide-2.jpg", "sizes": "1280x811", "type": "image/jpeg", "form_factor": "wide", "label": "Reading at the focal point" }
   ]
 }
