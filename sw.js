@@ -2,11 +2,12 @@
    The app shell + vendored parsers are precached; Google Fonts are cached at
    runtime. Books are stored locally in IndexedDB (see js/store.js), so once you've
    opened the app online, both it and your library work with no connection.
-   Bump CACHE_VERSION whenever shell files change so clients pick up the update. */
+   CACHE_VERSION is derived from the shell files' content — after changing any
+   of them run `npm run sw:bump` (CI's sw:check fails otherwise). */
 const CACHE_VERSION = "stillpoint-v49";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
-// All paths are relative to this file (served at /stillpoint/sw.js).
+// All paths are relative to this file (served from the site root).
 const SHELL = [
   "./",
   "index.html",
