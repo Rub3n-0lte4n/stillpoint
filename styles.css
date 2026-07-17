@@ -620,6 +620,13 @@
   .more-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--t-slow) var(--ease-out);}
   .more-wrap.open{grid-template-rows:1fr;}
   .controls.more{overflow:hidden;min-height:0;padding-top:22px;border-top:1px solid var(--hair-soft);}
+  /* every expanded row centres like the rest of the dock; the guide link gets
+     its own quiet centred row instead of floating beside the themes. The
+     stretched button swaps its border underline for one that hugs the text. */
+  .controls.more .guide-open{
+    flex-basis:100%;text-align:center;margin-top:2px;border-bottom:none;
+    text-decoration:underline;text-decoration-color:rgba(230,197,135,0.4);text-underline-offset:4px;
+  }
 
   .kbd-hint{text-align:center;color:var(--ink-mute);font-size:11.5px;letter-spacing:.4px;margin-top:14px;}
   .kbd-hint kbd{font-family:"Spline Sans";background:rgba(255,255,255,0.06);border:1px solid var(--hair);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--ink-soft);margin:0 2px;}
