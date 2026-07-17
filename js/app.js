@@ -79,7 +79,10 @@ let zenTimer = null;
 function armZen(){ clearTimeout(zenTimer); if(!settings.zen) return; zenTimer = setTimeout(()=>{ if(S.playing && settings.zen) $("reader").classList.add("zen"); }, 1800); }
 function disarmZen(){ clearTimeout(zenTimer); zenTimer = null; $("reader").classList.remove("zen"); }
 
-/* one-time home-screen nudge, offered only after the first finished book */
+/* one-time home-screen nudge, offered only after the first finished book.
+   Queued at finish, shown on the library — a toast over the finish card (or
+   any open modal) photobombs the moment it means to celebrate. */
+let nudgeQueued = false;
 let deferredInstall = null;
 window.addEventListener("beforeinstallprompt", (e)=>{ e.preventDefault(); deferredInstall = e; });
 function isStandalone(){ return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
@@ -409,7 +412,7 @@ function finish(){
   if(rv){ rv.classList.toggle("hidden", hl===0); if(hl) rv.textContent = `Review ${hl} highlight${hl===1?"":"s"}`; }
   $("done").classList.add("show");
   $("doneLib").focus({preventScroll:true});   // move focus into the dialog
-  maybeNudgeInstall();
+  nudgeQueued = true;   // nudge at the next clean moment (the library), never over this card
 }
 
 // Keep Tab focus inside an open dialog (basic focus trap for the modals).
@@ -1131,6 +1134,7 @@ function showLibrary(){
   document.title = BASE_TITLE;
   renderLibrary(); renderStreak();
   $("dropzone").focus({preventScroll:true});
+  if(nudgeQueued){ nudgeQueued=false; maybeNudgeInstall(); }
   maybeHint("landing");
 }
 // Back dismisses the topmost surface first — the platform promise on Android —
