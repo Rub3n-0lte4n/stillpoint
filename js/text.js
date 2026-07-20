@@ -144,6 +144,41 @@ export function sentenceFactors(tokens, strength = 0.35){
   return out;
 }
 
+/* ---------------- rewind on resume ----------------
+   How far to back up when the reader comes back depends on how long they were
+   gone. A glance away needs a word or two to re-orient. A real interruption has
+   taken the sentence with it, so past the threshold we return to where the
+   sentence began rather than counting words backwards, because a word count does
+   not know where the meaning starts.
+
+   A caller with no measured gap (resuming a document from a previous session)
+   gets the old fixed step, so that path behaves exactly as before. */
+export const REWIND_GLANCE_MS   = 4000;   // at or under this, barely move
+export const REWIND_SENTENCE_MS = 25000;  // at or over this, return to the sentence
+export const REWIND_MIN   = 2;
+export const REWIND_MAX   = 8;
+export const REWIND_FIXED = 5;            // the pre-2026-07 behaviour, still the fallback
+export const REWIND_CAP   = 40;           // guards against unpunctuated "sentences"
+
+export function rewindTarget(tokens, index, awayMs){
+  const n = Array.isArray(tokens) ? tokens.length : 0;
+  const i = Math.max(0, Math.min(Math.trunc(index) || 0, n));
+  if(i <= 0) return 0;
+  const back = w => Math.max(0, i - w);
+  if(!Number.isFinite(awayMs) || awayMs < 0) return back(REWIND_FIXED);
+  if(awayMs >= REWIND_SENTENCE_MS){
+    // Snap to the start of the sentence, but floor at MAX words so a long absence
+    // never rewinds less than a medium one (near a sentence start, its beginning
+    // is only a word or two back), and ceiling at CAP words so an unpunctuated
+    // run can't fling the reader to the top of the document.
+    const s = sentenceStart(tokens, i - 1);
+    return Math.max(back(REWIND_CAP), Math.min(back(REWIND_MAX), s));
+  }
+  if(awayMs <= REWIND_GLANCE_MS) return back(REWIND_MIN);
+  const t = (awayMs - REWIND_GLANCE_MS) / (REWIND_SENTENCE_MS - REWIND_GLANCE_MS);
+  return back(Math.round(REWIND_MIN + t * (REWIND_MAX - REWIND_MIN)));
+}
+
 // Short looping passage for the auto-playing hero preview — phrased so the demo also carries the message.
 export const HERO = `Every word arrives at one still point. No scanning. No hunting across the line. Your eyes rest while the reading moves. This is what focus feels like.`;
 

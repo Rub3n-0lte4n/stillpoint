@@ -11,10 +11,13 @@
 // persisted (Phase 2+ references blocks by id/after, not by carrying pixels).
 import { tokenize } from "./text.js";
 
-const pdfjsLib = window.pdfjsLib;
-const JSZip = window.JSZip;
+// Read through globalThis so the module also imports in a non-browser context
+// (the unit tests exercise the pure helpers below). In the browser this is the
+// same object as before; parsePDF/parseEPUB still need the real libraries.
+const pdfjsLib = globalThis.window?.pdfjsLib;
+const JSZip = globalThis.window?.JSZip;
 // Vendored worker (same version) — keeps PDF parsing working offline.
-pdfjsLib.GlobalWorkerOptions.workerSrc = "js/vendor/pdf.worker.min.js";
+if(pdfjsLib?.GlobalWorkerOptions) pdfjsLib.GlobalWorkerOptions.workerSrc = "js/vendor/pdf.worker.min.js";
 
 // EPUB tag → block kind. Only these elements are captured as blocks; everything
 // else descends normally and its text becomes tokens as before.
@@ -63,6 +66,134 @@ export function sanitizeHTML(el){
   return clone.outerHTML;
 }
 
+/* ---------------- reading order for multi-column pages ----------------
+   pdf.js hands back text items in content-stream order. On a single-column page
+   that is reading order; on a multi-column page it is whatever the producing tool
+   happened to emit, so a paper that streams one column at a time comes out right
+   by luck and one that interleaves comes out shuffled mid-sentence.
+
+   This scans for the vertical gutters between columns, assigns each item to a
+   column, and reads each column top to bottom before moving right. Items that
+   straddle a gutter (titles, full-width abstracts, wide figures) cut the page
+   into horizontal bands, so a heading between two column-pairs stays where it
+   belongs instead of being hoisted to the top.
+
+   Precision-favoured. Occupancy is counted per text row rather than per item, so
+   a few full-width lines cannot erase a real gutter, and anything that does not
+   look clearly columnar is returned untouched: single-column documents keep
+   their previous behaviour exactly. Exported for tests. */
+
+const COL_MIN_ITEMS  = 16;    // too little text on the page to judge safely
+const COL_BINS       = 160;   // horizontal resolution of the occupancy scan
+const COL_MIN_GUTTER = 0.03;  // a gutter spans at least this share of the width
+const COL_CENTER_LO  = 0.22;  // gutters outside the central band are ignored, so
+const COL_CENTER_HI  = 0.78;  // right-aligned page numbers never read as columns
+const COL_ROW_NOISE  = 0.12;  // a gutter bin tolerates this share of rows crossing
+const COL_MIN_SHARE  = 0.12;  // every column carries at least this share of items
+const COL_MAX_SPAN   = 0.30;  // more straddling items than this means not columnar
+const COL_ROW_Q      = 3;     // baseline quantum, matching detectTableRegion
+
+export function orderPageItems(items){
+  if(!Array.isArray(items) || items.length < COL_MIN_ITEMS) return items;
+
+  const all = [];
+  for(let i=0;i<items.length;i++){
+    const it = items[i];
+    if(!it || !it.transform) return items;          // unpositioned item: do not reorder
+    const x0 = it.transform[4], y = it.transform[5];
+    if(!isFinite(x0) || !isFinite(y)) return items;
+    const w = isFinite(it.width) ? Math.max(0, it.width) : 0;
+    all.push({ i, x0, x1:x0+w, yq: Math.round(y / COL_ROW_Q) * COL_ROW_Q, ink: !!(it.str && it.str.trim()) });
+  }
+  const text = all.filter(t => t.ink);
+  if(text.length < COL_MIN_ITEMS) return items;
+
+  let minX = Infinity, maxX = -Infinity;
+  for(const t of text){ if(t.x0 < minX) minX = t.x0; if(t.x1 > maxX) maxX = t.x1; }
+  const span = maxX - minX;
+  if(!(span > 0)) return items;
+
+  // Occupancy per text row, so one full-width title costs a single row, not the page.
+  const rows = new Map();
+  for(const t of text){
+    if(!rows.has(t.yq)) rows.set(t.yq, []);
+    rows.get(t.yq).push(t);
+  }
+  const binOf = x => Math.max(0, Math.min(COL_BINS-1, Math.floor(((x - minX) / span) * COL_BINS)));
+  const hits = new Uint16Array(COL_BINS);
+  for(const row of rows.values()){
+    const seen = new Uint8Array(COL_BINS);
+    for(const t of row){ const a = binOf(t.x0), b = binOf(t.x1); for(let k=a;k<=b;k++) seen[k]=1; }
+    for(let k=0;k<COL_BINS;k++) hits[k] += seen[k];
+  }
+
+  const noiseMax = Math.floor(rows.size * COL_ROW_NOISE);
+  const loBin = Math.floor(COL_BINS * COL_CENTER_LO);
+  const hiBin = Math.ceil(COL_BINS * COL_CENTER_HI);
+  const minRun = Math.max(2, Math.round(COL_BINS * COL_MIN_GUTTER));
+
+  const gutters = [];
+  let k = loBin;
+  while(k <= hiBin){
+    if(hits[k] > noiseMax){ k++; continue; }
+    let j = k;
+    while(j <= hiBin && hits[j] <= noiseMax) j++;
+    if(j - k >= minRun) gutters.push(minX + (((k + j - 1) / 2 + 0.5) / COL_BINS) * span);
+    k = j;
+  }
+  if(gutters.length === 0) return items;
+
+  // An item crossing a gutter is full-width; otherwise it sits in the column
+  // formed by however many gutters lie entirely to its left.
+  const columnOf = t => {
+    let c = 0;
+    for(const g of gutters){
+      if(t.x0 < g && t.x1 > g) return -1;
+      if(t.x0 >= g) c++;
+    }
+    return c;
+  };
+
+  const cols = gutters.length + 1;
+  const buckets = Array.from({ length: cols }, ()=>[]);
+  const spanners = [];
+  for(const t of all){
+    const c = columnOf(t);
+    if(c < 0) spanners.push(t); else buckets[c].push(t);
+  }
+
+  const inked = a => a.reduce((n,t)=> n + (t.ink?1:0), 0);
+  if(inked(spanners) > text.length * COL_MAX_SPAN) return items;
+  if(buckets.filter(b => inked(b) >= text.length * COL_MIN_SHARE).length < 2) return items;
+
+  // Full-width rows cut the page into bands; each band reads column by column.
+  const spanRows = [...new Set(spanners.map(t => t.yq))].sort((a,b)=> b-a);
+  const bandOf = yq => { let b=0; while(b < spanRows.length && spanRows[b] > yq) b++; return b; };
+  const order = (a,b) => (b.yq - a.yq) || (a.x0 - b.x0) || (a.i - b.i);
+
+  const cells = new Map();                       // band*cols + column → items
+  for(let c=0;c<cols;c++){
+    for(const t of buckets[c]){
+      const key = bandOf(t.yq) * cols + c;
+      if(!cells.has(key)) cells.set(key, []);
+      cells.get(key).push(t);
+    }
+  }
+  const bandSpanners = new Map();
+  for(const t of spanners){
+    if(!bandSpanners.has(t.yq)) bandSpanners.set(t.yq, []);
+    bandSpanners.get(t.yq).push(t);
+  }
+
+  const out = [];
+  const push = arr => { if(arr) for(const t of arr.sort(order)) out.push(items[t.i]); };
+  for(let b=0;b<=spanRows.length;b++){
+    for(let c=0;c<cols;c++) push(cells.get(b * cols + c));
+    if(b < spanRows.length) push(bandSpanners.get(spanRows[b]));
+  }
+  return out.length === items.length ? out : items;
+}
+
 /* ---------------- PDF ---------------- */
 export async function parsePDF(file, onProgress = ()=>{}){
   const buf = await file.arrayBuffer();
@@ -74,7 +205,7 @@ export async function parsePDF(file, onProgress = ()=>{}){
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
     let pageText = "", lastY = null;
-    for(const it of content.items){
+    for(const it of orderPageItems(content.items)){
       if(lastY!==null && it.transform && Math.abs(it.transform[5]-lastY) > 2) pageText += " ";
       pageText += it.str + (it.hasEOL ? " " : "");
       if(it.transform) lastY = it.transform[5];

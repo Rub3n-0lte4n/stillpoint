@@ -253,11 +253,33 @@
     <div class="backup hidden" id="backup">
       <div class="backup-head">Move to another device</div>
       <p class="backup-copy">Your whole library packs into one file, books included, along with your positions and settings. Share it straight to another device (AirDrop, Messages…) or export it, then tap Import there. No account, no server. Your data stays in your hands.</p>
+      <label class="backup-lock">
+        <input type="checkbox" id="encToggle" />
+        <span class="backup-lock-text">
+          <span class="backup-lock-title">Encrypt this backup</span>
+          <span class="backup-lock-sub">Worth doing if the file will pass through a cloud drive or an email.</span>
+        </span>
+      </label>
+
+      <div class="backup-pass hidden" id="encFields">
+        <input type="password" id="encPass" placeholder="Passphrase" autocomplete="new-password" spellcheck="false" />
+        <input type="password" id="encPass2" placeholder="Repeat it" autocomplete="new-password" spellcheck="false" />
+        <p class="backup-note">The passphrase never leaves this device, so there is nobody who can reset it, and a backup whose passphrase has been forgotten cannot be opened again.</p>
+      </div>
+
       <div class="backup-actions">
         <button class="btn gold hidden" id="shareBtn">⤴ Share backup</button>
         <button class="btn ghost" id="exportBtn">↓ Export library</button>
         <button class="btn ghost" id="importBtn">↑ Import backup</button>
         <input type="file" id="importInput" accept=".json,application/json" class="hidden" />
+      </div>
+
+      <div class="backup-unlock hidden" id="unlockRow">
+        <p class="backup-note">That backup is encrypted. Enter the passphrase it was exported with.</p>
+        <div class="backup-unlock-row">
+          <input type="password" id="unlockPass" placeholder="Passphrase" autocomplete="current-password" spellcheck="false" />
+          <button class="btn gold" id="unlockBtn">Open backup</button>
+        </div>
       </div>
     </div>
 

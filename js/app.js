@@ -1,5 +1,5 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
-import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt } from "./text.js";
+import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt, rewindTarget } from "./text.js";
 import { Haptics } from "./haptics.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
@@ -10,6 +10,7 @@ import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
 import { stageGestures, sheetDrag, rowSwipe } from "./gestures.js";
 import { Hints } from "./hints.js";
 import { mergeLibrary, LIB_MAX } from "./library.js";
+import { encryptBackup, decryptBackup, isEncryptedBackup } from "./crypto.js";
 
 const BASE_TITLE = document.title;   // restored when leaving the reader
 
@@ -31,6 +32,7 @@ const S = {
   timer: null,
   readMs: 0,           // accumulated active reading time (excludes pauses)
   playStart: null,     // wall-clock when the current run started streaming
+  pausedAt: null,      // wall-clock when the stream last stopped (scales the rewind)
   rampStart: 0,        // token index where the current run began (for speed ramp)
   // --- Phase 2: non-linear blocks ---
   blocks: [],          // sidecar from the parser: [{id, after, kind, payload, unit}]
@@ -44,12 +46,12 @@ const S = {
   sentenceFactor: null,// Float32Array — per-token smart-pacing slowdown factor
   highlights: [],      // [{start,end,unit,ts}] marked ranges for this document
   hlUnitShown: null,   // Set of units whose end-of-chapter review toast was offered
+  pendingBackup: null, // encrypted envelope waiting on a passphrase (never persisted)
 };
 const KIND_LABEL = { table:"Table", image:"Image", figure:"Figure", equation:"Equation", code:"Code", quote:"Quote" };
 function modeForKind(kind){ return resolveMode(S.blockMode, kind); }
 const $ = (id) => document.getElementById(id);
 const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
-const REWIND_WORDS = 5;   // back up on resume for re-orientation
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
 const settings = { countdown:true, context:true, smartPacing:true, zen:true, moreOpen:false };  // reading aids + dock state (persisted)
@@ -315,7 +317,10 @@ function step(){
 function play(){
   if(S.tokens.length===0) return;
   if(S.index>=S.tokens.length) S.index=0;
-  if(S.index>0) S.index = Math.max(0, S.index - REWIND_WORDS);  // rewind for re-orientation
+  // Back up by however long the reader was actually away: a glance costs a word
+  // or two, an interruption returns them to the top of the sentence.
+  S.index = rewindTarget(S.tokens, S.index, S.pausedAt === null ? NaN : Date.now() - S.pausedAt);
+  S.pausedAt = null;
   S.playing = true;
   $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
   $("playBtn").setAttribute("aria-label","Pause");
@@ -361,6 +366,7 @@ function settleReading(){
 }
 function pause(){
   S.playing=false;
+  S.pausedAt=Date.now();   // how long until the next resume decides the rewind
   clearTimeout(S.timer);
   releaseWakeLock();
   disarmZen();
@@ -450,6 +456,7 @@ function nudgeWpm(v){ setWpm(Math.min(800, Math.max(150, v))); showSpeedGhost(S.
 
 function jumpTo(i){
   S.index = Math.max(0, Math.min(i, S.tokens.length-1));
+  S.pausedAt = null;   // an explicit jump is a chosen spot: no away-time rewind on top of it
   render(); updateProgress(); saveProgress(true);
 }
 // The chevron only ghosts in when the position truly moved — at the first or
@@ -1266,7 +1273,7 @@ function triggerDownload(blob, filename){
 // Bundle everything stored locally (library list + positions + prefs + the cached
 // book files, base64-encoded inline) into one self-contained Blob. Returns {blob,count}
 // or null if there's nothing to back up.
-async function buildBackup(){
+async function buildBackup(passphrase){
   const lib = loadLib();
   if(lib.length===0){ toast("Nothing to back up yet. Open a book first."); return null; }
   let prefs=null; try{ prefs = JSON.parse(localStorage.getItem(PREFS_KEY)||"null"); }catch(e){}
@@ -1283,18 +1290,39 @@ async function buildBackup(){
     try{ const hl = await Store.getHighlights(item.key); if(hl) highlights[item.key]=hl; }catch(e){}
   }
   const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights, streak:Streak.raw()||undefined };
-  return { blob:new Blob([JSON.stringify(backup)], { type:"application/json" }), count:files.length };
+  // With a passphrase the whole bundle becomes the ciphertext of an envelope, so
+  // a backup sitting in a cloud drive is a sealed file rather than your books.
+  let text = JSON.stringify(backup);
+  if(passphrase) text = JSON.stringify(await encryptBackup(text, passphrase));
+  return { blob:new Blob([text], { type:"application/json" }), count:files.length, encrypted:!!passphrase };
 }
+
+/* The passphrase is read at the moment of export and never stored: not in prefs,
+   not in IndexedDB, not in the file. Returns "" for an unencrypted export, or
+   null when the fields are filled in wrongly (the reader already has the
+   message, and the caller just stops). */
+function backupPassphrase(){
+  if(!$("encToggle").checked) return "";
+  const a = $("encPass").value, b = $("encPass2").value;
+  if(!a){ toast("Enter a passphrase, or turn encryption off.", {error:true}); $("encPass").focus(); return null; }
+  if(a.length < 8){ toast("Use at least 8 characters so the passphrase is worth having.", {error:true}); $("encPass").focus(); return null; }
+  if(a !== b){ toast("Those two passphrases don't match.", {error:true}); $("encPass2").focus(); return null; }
+  return a;
+}
+function clearPassphrase(){ $("encPass").value = ""; $("encPass2").value = ""; }
 
 // Download the backup as a file (works everywhere).
 async function exportLibrary(){
-  showParse("Packaging your library…","Bundling books, positions and settings");
-  let res; try{ res = await buildBackup(); }
+  const pass = backupPassphrase();
+  if(pass === null) return;
+  showParse(pass ? "Sealing your library…" : "Packaging your library…", pass ? "Deriving the key and encrypting" : "Bundling books, positions and settings");
+  let res; try{ res = await buildBackup(pass); }
   catch(err){ hideParse(); toast("Couldn't export: "+(err&&err.message?err.message:err), {error:true}); return; }
   if(!res){ hideParse(); return; }
   triggerDownload(res.blob, backupFilename());
   hideParse();
-  toast(`Exported ${res.count} book${res.count===1?"":"s"}. Import this file on another device to sync.`);
+  clearPassphrase();
+  toast(`Exported ${res.count} book${res.count===1?"":"s"}${res.encrypted?", encrypted":""}. Import this file on another device to sync.`);
 }
 
 // True only when the browser can share actual files (iOS/iPadOS Safari, Android Chrome…).
@@ -1305,11 +1333,14 @@ function canShareFiles(){
 // Hand the backup file to the OS share sheet — AirDrop, Messages, Mail, etc.
 async function shareBackup(){
   if(!navigator.share){ return exportLibrary(); }   // no Web Share at all → just download
-  showParse("Preparing your library…","Bundling books, positions and settings");
-  let res; try{ res = await buildBackup(); }
+  const pass = backupPassphrase();
+  if(pass === null) return;
+  showParse(pass ? "Sealing your library…" : "Preparing your library…", pass ? "Deriving the key and encrypting" : "Bundling books, positions and settings");
+  let res; try{ res = await buildBackup(pass); }
   catch(err){ hideParse(); toast("Couldn't prepare the backup: "+(err&&err.message?err.message:err), {error:true}); return; }
   if(!res){ hideParse(); return; }
   hideParse();
+  clearPassphrase();
   const file = new File([res.blob], backupFilename(), { type:"application/json" });
   // Reuse the backup we just built for the download fallback — no rebuild, one clear message.
   const saveInstead = ()=>{ triggerDownload(res.blob, backupFilename()); toast(`Saved your library as a file instead. Import it on another device to sync.`); };
@@ -1328,6 +1359,35 @@ async function importBackup(file){
   let data;
   try{ data = JSON.parse(await file.text()); }
   catch(e){ toast("That file isn't a valid Stillpoint backup.", {error:true}); return; }
+  // An encrypted backup can't be read until the reader supplies the passphrase,
+  // so hold the envelope and open the unlock row instead of failing the import.
+  if(isEncryptedBackup(data)){
+    S.pendingBackup = data;
+    $("unlockRow").classList.remove("hidden");
+    $("unlockPass").value = "";
+    $("unlockPass").focus({preventScroll:true});
+    return;
+  }
+  await restoreBackup(data);
+}
+
+// Open the held envelope with whatever the reader typed, then restore as usual.
+async function unlockBackup(){
+  if(!S.pendingBackup) return;
+  const pass = $("unlockPass").value;
+  if(!pass){ toast("Enter the passphrase for that backup.", {error:true}); $("unlockPass").focus(); return; }
+  showParse("Opening your backup…","Checking the passphrase");
+  let data;
+  try{ data = JSON.parse(await decryptBackup(S.pendingBackup, pass)); }
+  catch(err){ hideParse(); toast(err&&err.message?err.message:"Couldn't open that backup.", {error:true}); return; }
+  hideParse();
+  S.pendingBackup = null;
+  $("unlockRow").classList.add("hidden");
+  $("unlockPass").value = "";
+  await restoreBackup(data);
+}
+
+async function restoreBackup(data){
   if(!data || data.format!==BACKUP_FORMAT || !Array.isArray(data.library)){
     toast("That doesn't look like a Stillpoint backup.", {error:true}); return;
   }
@@ -1598,6 +1658,12 @@ function init(){
   $("exportBtn").onclick = exportLibrary;
   $("importBtn").onclick = ()=>$("importInput").click();
   $("importInput").onchange = e=>{ const f=e.target.files[0]; importBackup(f); e.target.value=""; };
+  $("encToggle").onchange = e=>{
+    $("encFields").classList.toggle("hidden", !e.target.checked);
+    if(e.target.checked) $("encPass").focus({preventScroll:true}); else clearPassphrase();
+  };
+  $("unlockBtn").onclick = unlockBackup;
+  $("unlockPass").onkeydown = e=>{ if(e.key==="Enter"){ e.preventDefault(); unlockBackup(); } };
 
   $("pasteGo").onclick=()=>{
     const txt=$("paste").value.trim();
