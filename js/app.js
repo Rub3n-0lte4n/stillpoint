@@ -495,9 +495,10 @@ function presentKinds(){ return [...new Set(S.blocks.map(b=>b.kind))]; }
 function renderBlockInto(el, block){
   el.innerHTML = "";
   const p = block && block.payload;
-  if(p && p.type==="image"){
+  const imgSrc = p && p.type==="image" ? (p.dataUrl || p.blobUrl || "") : "";
+  if(imgSrc){
     const img=document.createElement("img");
-    img.src = p.dataUrl || p.blobUrl || ""; img.alt = p.alt || KIND_LABEL[block.kind] || "";
+    img.src = imgSrc; img.alt = p.alt || KIND_LABEL[block.kind] || "";
     el.appendChild(img);
   } else if(p && p.type==="html" && typeof p.html==="string"){
     el.innerHTML = p.html;
