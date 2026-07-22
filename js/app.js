@@ -47,6 +47,7 @@ const S = {
   highlights: [],      // [{start,end,unit,ts}] marked ranges for this document
   hlUnitShown: null,   // Set of units whose end-of-chapter review toast was offered
   pendingBackup: null, // encrypted envelope waiting on a passphrase (never persisted)
+  justCrossed: false,  // daily goal crossed; the landing ring owes one pulse
 };
 const KIND_LABEL = { table:"Table", image:"Image", figure:"Figure", equation:"Equation", code:"Code", quote:"Quote" };
 function modeForKind(kind){ return resolveMode(S.blockMode, kind); }
@@ -322,6 +323,7 @@ function play(){
   S.index = rewindTarget(S.tokens, S.index, S.pausedAt === null ? NaN : Date.now() - S.pausedAt);
   S.pausedAt = null;
   S.playing = true;
+  updateGoalWhisper();   // the whisper never coexists with the stream
   $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
   $("playBtn").setAttribute("aria-label","Pause");
   updateProgress();
@@ -360,9 +362,15 @@ function settleReading(){
   const ms = Date.now()-S.playStart;
   S.readMs += ms; S.playStart = null;
   const { crossed, current } = Streak.addSeconds(ms/1000);
-  if(crossed && !document.hidden)
-    toast(current > 1 ? `Goal met. ${current} days in a row.` : "Goal met. Your streak starts today.");
+  if(crossed){
+    S.justCrossed = true;   // the landing ring pulses on its next visible render
+    if(!document.hidden){
+      toast(current > 1 ? `Goal met. ${current} days in a row.` : "Goal met. Your streak starts today.", { gold:true });
+      Haptics.trigger("success");
+    }
+  }
   renderStreak();
+  updateGoalWhisper();
 }
 function pause(){
   S.playing=false;
@@ -828,10 +836,10 @@ function updateProgress(throttled){
 }
 
 /* ---------------- toasts (non-blocking, on-brand feedback) ---------------- */
-function toast(msg, {action, onAction, duration=4500, error=false, hint=false}={}){
+function toast(msg, {action, onAction, duration=4500, error=false, hint=false, gold=false}={}){
   const wrap=$("toasts");
   const el=document.createElement("div");
-  el.className="toast"+(error?" err":"")+(hint?" hint":"");
+  el.className="toast"+(error?" err":"")+((hint||gold)?" hint":"");   // gold = hint dress, no Guide
   el.setAttribute("role", error?"alert":"status");   // errors interrupt; status messages wait politely
   const m=document.createElement("span"); m.className="tmsg"; m.textContent=msg; el.appendChild(m);
   let timer;
@@ -882,25 +890,78 @@ function noteUpdate(){ updatePending = true; maybeUpdateToast(); }
 // Hidden until there's anything to show (any ledger data or a non-empty library),
 // same gating spirit as #backup. Ring = today's minutes toward the daily goal.
 const RING_C = 2*Math.PI*15.5;   // circumference of the progress ring circle
+let ringArmed = true;   // arrival animation: the ring fills from empty once per landing visit
 function renderStreak(){
   const el=$("streakStrip"); if(!el) return;
   const st=Streak.getState();
   const show = Streak.hasData() || loadLib().length>0;
   el.classList.toggle("hidden", !show);
   if(!show) return;
-  $("streakCount").textContent = st.current;
+
+  // Warm zero state: never show a big zero. Until day one exists, the slot
+  // speaks in minutes-to-go, the same framing the finish card uses.
+  const count=$("streakCount"), label=$("streakLabel");
+  if(st.current===0){
+    count.classList.add("hidden");
+    const left=Math.max(1, Math.ceil((st.goalMin*60-st.todaySec)/60));
+    label.textContent = st.todaySec>0 ? `${left} min to day one` : `Read ${st.goalMin} min to start a streak`;
+  } else {
+    count.classList.remove("hidden");
+    count.textContent = st.current;
+    label.textContent = "day streak";
+  }
   const best=$("streakBest");
   best.classList.toggle("hidden", !(st.best>st.current));
   best.textContent = "best "+st.best;
   $("goalVal").textContent = st.goalMin+" min a day";
   $("goalDown").disabled = st.goalMin<=GOAL_MIN; $("goalUp").disabled = st.goalMin>=GOAL_MAX;
+
   const fill=$("streakRingFill");
   fill.style.strokeDasharray = RING_C;
-  fill.style.strokeDashoffset = RING_C * (1 - Math.min(1, st.todaySec/(st.goalMin*60)));
+  const target = RING_C * (1 - Math.min(1, st.todaySec/(st.goalMin*60)));
+  if(ringArmed && el.offsetParent){
+    // start empty, commit that frame, then let the existing transition carry it
+    ringArmed=false;
+    fill.style.strokeDashoffset = RING_C;
+    void fill.getBoundingClientRect();
+  }
+  fill.style.strokeDashoffset = target;
+
+  // a crossing waits for the first render the reader can actually see
+  if(S.justCrossed && el.offsetParent){
+    S.justCrossed=false;
+    const ring=$("streakRing");
+    ring.classList.remove("pulse"); void ring.getBoundingClientRect(); ring.classList.add("pulse");
+    ring.addEventListener("animationend",()=>ring.classList.remove("pulse"),{once:true});
+  }
+
+  // the week row: seven local days, oldest first, today anchored to the ring
+  const wk=$("streakWeek");
+  const days=Streak.week();
+  wk.setAttribute("aria-label", `Last 7 days: goal met on ${days.filter(d=>d.met).length}`);
+  wk.innerHTML = days.map((d,i)=>{
+    const initial=new Date(d.key+"T12:00").toLocaleDateString("en-US",{weekday:"narrow"});
+    const cls="sw-day"+(d.met?" met":d.sec>0?" part":"")+(i===6?" today":"");
+    return `<div class="${cls}" aria-hidden="true"><span>${initial}</span><span class="sw-dot"></span></div>`;
+  }).join("");
+
   const mins = Math.floor(st.todaySec/60);
   $("streakRing").setAttribute("aria-label",
     st.metToday ? `Daily goal met. ${mins} minute${mins===1?"":"s"} read today`
     : st.todaySec>0 ? `${mins} of ${st.goalMin} minutes read today` : "No reading yet today");
+}
+
+// Pause-only fine print above the scrubber: how close today's goal is.
+// Absent while streaming; silent forever once the goal is met.
+function updateGoalWhisper(){
+  const w=$("goalWhisper"); if(!w) return;
+  const st=Streak.getState();
+  const show = !S.playing && !st.metToday && st.todaySec>0 && S.tokens.length>0;
+  w.classList.toggle("hidden", !show);
+  if(show){
+    const left=Math.max(1, Math.ceil((st.goalMin*60-st.todaySec)/60));
+    w.textContent=`${left} min to today's goal`;
+  }
 }
 
 /* ---------------- resume / library (localStorage) ---------------- */
@@ -1030,6 +1091,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   S.title=title; S.meta=meta; S.key=key; S.index=0;
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   S.pausedAt=null;   // the away-clock belongs to the previous document's stream
+  updateGoalWhisper();   // no stale goal line survives a book switch
   const prior = loadLib().find(x=>x.key===key);
   if(prior && prior.index>0 && prior.index<tokens.length) S.index=prior.index;
 
@@ -1141,6 +1203,7 @@ function showLibrary(){
   $("reader").classList.remove("show");
   $("landing").style.display="";
   document.title = BASE_TITLE;
+  ringArmed = true;   // returning to the shelf replays the ring's arrival fill
   renderLibrary(); renderStreak();
   $("dropzone").focus({preventScroll:true});
   if(nudgeQueued){ nudgeQueued=false; maybeNudgeInstall(); }

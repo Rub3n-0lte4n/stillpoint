@@ -240,7 +240,7 @@
         </svg>
         <div class="streak-nums">
           <b id="streakCount">0</b>
-          <span class="streak-label">day streak</span>
+          <span class="streak-label" id="streakLabel">day streak</span>
           <span class="streak-best hidden" id="streakBest"></span>
         </div>
         <div class="streak-goal">
@@ -248,6 +248,7 @@
           <span class="goal-val" id="goalVal">5 min a day</span>
           <button type="button" class="wpm-step" id="goalUp" aria-label="Raise daily goal">+</button>
         </div>
+        <div class="streak-week" id="streakWeek"></div>
       </div>
     </section>
 
@@ -441,6 +442,9 @@
 
   <div class="dock">
     <div class="wrap">
+      <!-- pause-only fine print: how close today's goal is. Never present while
+           streaming; silence after the goal is met. -->
+      <div class="goal-whisper hidden" id="goalWhisper"></div>
       <div class="scrub">
         <div class="time" id="tElapsed">0:00</div>
         <div class="track" id="track" role="slider" tabindex="0" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="fill" id="trackFill"></div><div class="knob" id="trackKnob"></div></div>

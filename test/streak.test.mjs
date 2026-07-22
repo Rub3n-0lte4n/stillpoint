@@ -110,3 +110,29 @@ test("importMerge: per-day max, best max, local goal preserved", () => {
   assert.equal(raw.days["2026-07-11"], 700);        // per-day max
   assert.equal(raw.days["2026-07-01"], 800);
 });
+
+test("weekOf: 7 local days ending today, oldest first", async () => {
+  const { weekOf } = await import("../js/streak.js");
+  const days = { "2026-07-05": 400, "2026-07-08": 120, "2026-07-11": 300 };
+  const w = weekOf(days, GOAL, "2026-07-11");
+  assert.equal(w.length, 7);
+  assert.equal(w[0].key, "2026-07-05");             // oldest first
+  assert.equal(w[6].key, "2026-07-11");             // today last
+  assert.deepEqual(w.map(x => x.met),
+    [true, false, false, false, false, false, true]);
+  assert.equal(w[3].sec, 120);                      // partial day carries its seconds
+});
+
+test("weekOf: crosses a month boundary on local dates", async () => {
+  const { weekOf } = await import("../js/streak.js");
+  const w = weekOf({ "2026-06-30": 400 }, GOAL, "2026-07-02");
+  assert.equal(w[0].key, "2026-06-26");
+  assert.equal(w.find(x => x.key === "2026-06-30").met, true);
+});
+
+test("Streak.week: empty state gives 7 unmet zero days", () => {
+  store.clear();
+  const w = Streak.week(D("2026-07-11T12:00"));
+  assert.equal(w.length, 7);
+  assert.ok(w.every(x => x.sec === 0 && !x.met));
+});

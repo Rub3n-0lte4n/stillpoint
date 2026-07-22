@@ -42,6 +42,18 @@ export function mergeDays(local, imported){
   return out;
 }
 
+// Last 7 local days ending on `todayStr`, oldest first — the landing week row.
+export function weekOf(days, goalMin, todayStr){
+  const out = [];
+  let k = todayStr;
+  for(let i = 0; i < 7; i++){
+    const sec = days[k] || 0;
+    out.unshift({ key: k, sec, met: sec >= goalMin * 60 });
+    k = prevKey(k);
+  }
+  return out;
+}
+
 export function pruneDays(days, keep = KEEP_DAYS){
   const keys = Object.keys(days).sort();
   if(keys.length <= keep) return days;
@@ -99,6 +111,10 @@ export const Streak = {
     st.goalMin = Math.min(GOAL_MAX, Math.max(GOAL_MIN, Math.round(min / GOAL_STEP) * GOAL_STEP));
     save(st);
     return st.goalMin;
+  },
+  week(d = new Date()){
+    const st = load() || fresh();
+    return weekOf(st.days, st.goalMin, todayKey(d));
   },
   raw(){ return load(); },   // for backup export
   // Backup import: per-day max, best max; the local goal wins unless local state is absent.
