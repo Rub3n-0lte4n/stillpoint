@@ -192,6 +192,7 @@
       </div>
     </header>
 
+    <main>
     <section class="hero">
       <h2>Finish books <em>again.</em></h2>
       <p>When you read, your eyes don't glide along the line. They jump ahead and dart back to re-read. Stillpoint removes the chase: every word arrives at one still point, and you read at the speed of thought.</p>
@@ -218,7 +219,7 @@
 
     <div class="or-row">or paste text</div>
     <div class="paste-shell">
-      <textarea id="paste" placeholder="Paste anything you want to read in flow…"></textarea>
+      <textarea id="paste" placeholder="Paste anything you want to read in flow…" aria-label="Text to read"></textarea>
       <div class="paste-actions">
         <button type="button" class="linklike demo-link" id="demoBtn">Load a demo passage</button>
         <button class="btn gold" id="pasteGo">Begin reading →</button>
@@ -262,8 +263,8 @@
       </label>
 
       <div class="backup-pass hidden" id="encFields">
-        <input type="password" id="encPass" placeholder="Passphrase" autocomplete="new-password" spellcheck="false" />
-        <input type="password" id="encPass2" placeholder="Repeat it" autocomplete="new-password" spellcheck="false" />
+        <input type="password" id="encPass" placeholder="Passphrase" autocomplete="new-password" spellcheck="false" aria-label="Backup passphrase" />
+        <input type="password" id="encPass2" placeholder="Repeat it" autocomplete="new-password" spellcheck="false" aria-label="Repeat the passphrase" />
         <p class="backup-note">The passphrase never leaves this device, so there is nobody who can reset it, and a backup whose passphrase has been forgotten cannot be opened again.</p>
       </div>
 
@@ -277,7 +278,7 @@
       <div class="backup-unlock hidden" id="unlockRow">
         <p class="backup-note">That backup is encrypted. Enter the passphrase it was exported with.</p>
         <div class="backup-unlock-row">
-          <input type="password" id="unlockPass" placeholder="Passphrase" autocomplete="current-password" spellcheck="false" />
+          <input type="password" id="unlockPass" placeholder="Passphrase" autocomplete="current-password" spellcheck="false" aria-label="Passphrase for this backup" />
           <button class="btn gold" id="unlockBtn">Open backup</button>
         </div>
       </div>
@@ -342,6 +343,7 @@
         <p class="fa">Most readers settle around 400 to 600 words a minute, roughly twice a comfortable book pace. You set the speed, and Stillpoint slows down by itself on dense sentences. There are no 3x promises here; it is built for finishing books, not skimming.</p>
       </details>
     </section>
+    </main>
 
     <footer class="site">
       Your files never leave this device. The reading happens locally, in your browser. · <a href="#" id="aboutLink">How it works</a> · <a href="#" id="guideLink">Reader guide</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
@@ -395,7 +397,7 @@
       </div>
     </div>
 
-    <div class="stage-shell">
+    <div class="stage-shell" role="main">
       <div class="stage" id="stage">
         <div class="guide top"></div>
         <div class="baseline"></div>
@@ -468,7 +470,7 @@
           <label>Speed · <span id="presetLabel">Focus</span></label>
           <div class="slider-row">
             <button type="button" class="wpm-step" id="wpmDown" aria-label="Slower">−</button>
-            <input type="range" id="wpm" min="150" max="800" step="10" value="400" />
+            <input type="range" id="wpm" min="150" max="800" step="10" value="400" aria-label="Reading speed, words per minute" />
             <button type="button" class="wpm-step" id="wpmUp" aria-label="Faster">+</button>
             <span class="val" aria-live="polite"><span id="wpmVal">400</span> wpm</span>
           </div>

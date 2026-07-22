@@ -181,6 +181,9 @@
   .tier.custom{flex-direction:row;align-items:center;justify-content:center;min-width:auto;background:transparent;border:none;box-shadow:none;color:var(--ink-soft);font-size:13.5px;padding:14px 10px;}
   .tier.custom:hover{color:var(--gold);transform:none;background:transparent;box-shadow:none;}
   .support-note{margin-top:22px;font-size:12.5px;color:var(--ink-mute);letter-spacing:.3px;}
+  /* the patron-code entrance is fine print, but its tap target must not be —
+     padding + negative margin inflate the hit area without moving the layout */
+  .support-note .linklike{padding:14px 6px;margin:-14px -6px;}
   .support-note .hh{color:var(--rose);}
 
   /* ---------- Landing ---------- */
@@ -310,11 +313,13 @@
   }
   .recent-item.will-delete .ri-del{color:#fff;background:linear-gradient(90deg, rgba(240,166,200,0.12), rgba(240,166,200,0.38));}
   .ri-face{
-    position:relative;display:flex;align-items:center;gap:14px;padding:13px 16px;
+    position:relative;display:flex;align-items:center;gap:14px;padding:0 16px;
     background-color:var(--bg-1);background-image:linear-gradient(0deg,var(--surface),var(--surface));
     transition:transform .26s var(--ease-out), background-image var(--t) var(--ease-out);
   }
-  .ri-open{flex:1;display:flex;align-items:center;gap:14px;min-width:0;background:none;border:none;padding:0;font:inherit;text-align:left;color:inherit;cursor:pointer;}
+  /* the row's vertical padding lives on the BUTTON, not the face — otherwise the
+     13px strips above and below the text are a dead div, not a tap target */
+  .ri-open{flex:1;display:flex;align-items:center;gap:14px;min-width:0;background:none;border:none;padding:13px 0;font:inherit;text-align:left;color:inherit;cursor:pointer;}
   .recent-item .ri-type{font-size:10px;font-weight:600;letter-spacing:1px;padding:4px 8px;border-radius:6px;background:rgba(139,92,246,0.2);color:var(--amethyst);text-transform:uppercase;flex:none;}
   .recent-item .ri-name{flex:1;font-size:14.5px;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .recent-item .ri-prog{font-size:12.5px;color:var(--gold);font-variant-numeric:tabular-nums;flex:none;}
