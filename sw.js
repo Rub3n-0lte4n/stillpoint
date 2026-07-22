@@ -4,7 +4,7 @@
    opened the app online, both it and your library work with no connection.
    CACHE_VERSION is derived from the shell files' content — after changing any
    of them run `npm run sw:bump` (CI's sw:check fails otherwise). */
-const CACHE_VERSION = "stillpoint-bbc18afbc8";
+const CACHE_VERSION = "stillpoint-5d14ed3062";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
 // All paths are relative to this file (served from the site root).

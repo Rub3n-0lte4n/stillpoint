@@ -1029,6 +1029,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   S.curCh = -1;   // first updateProgress sets the meta line
   S.title=title; S.meta=meta; S.key=key; S.index=0;
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
+  S.pausedAt=null;   // the away-clock belongs to the previous document's stream
   const prior = loadLib().find(x=>x.key===key);
   if(prior && prior.index>0 && prior.index<tokens.length) S.index=prior.index;
 
@@ -1357,6 +1358,11 @@ async function shareBackup(){
 
 async function importBackup(file){
   if(!file) return;
+  // A newly chosen file supersedes any envelope still waiting on its passphrase —
+  // otherwise the stale unlock row would quietly import the previous file.
+  S.pendingBackup = null;
+  $("unlockRow").classList.add("hidden");
+  $("unlockPass").value = "";
   let data;
   try{ data = JSON.parse(await file.text()); }
   catch(e){ toast("That file isn't a valid Stillpoint backup.", {error:true}); return; }
