@@ -55,7 +55,6 @@
     --t-fast:140ms; --t:220ms; --t-slow:360ms;
     --ease-out:cubic-bezier(.22,.61,.36,1);
     --ease-in:cubic-bezier(.4,0,1,1);
-    --ease-spring:cubic-bezier(.34,1.56,.64,1);
   }
 
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -163,7 +162,7 @@
   /* ---- Support / donation section ---- */
   .support-section{max-width:680px;margin:56px auto 0;text-align:center;}
   .support-eyebrow{font-size:11px;letter-spacing:2.6px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:10px;}
-  .support-copy{color:var(--ink-soft);font-size:14.5px;line-height:1.6;max-width:48ch;margin:0 auto 22px;}
+  .support-copy{color:var(--ink-soft);font-size:14.5px;line-height:1.6;max-width:48ch;margin:0 auto 22px;text-wrap:pretty;}
   .tiers{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;align-items:stretch;}
   .tier{
     display:flex;flex-direction:column;align-items:center;gap:3px;min-width:112px;
@@ -179,7 +178,7 @@
   .tier:hover .tier-ico svg{opacity:1;}
   .tier .tier-label{font-size:13px;color:var(--ink-soft);margin-top:5px;}
   .tier .tier-amt{font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:19px;color:var(--gold);margin-top:1px;}
-  .tier.custom{flex-direction:row;align-items:center;justify-content:center;min-width:auto;background:transparent;border:none;color:var(--ink-soft);font-size:13.5px;padding:14px 10px;}
+  .tier.custom{flex-direction:row;align-items:center;justify-content:center;min-width:auto;background:transparent;border:none;box-shadow:none;color:var(--ink-soft);font-size:13.5px;padding:14px 10px;}
   .tier.custom:hover{color:var(--gold);transform:none;background:transparent;box-shadow:none;}
   .support-note{margin-top:22px;font-size:12.5px;color:var(--ink-mute);letter-spacing:.3px;}
   .support-note .hh{color:var(--rose);}
@@ -198,6 +197,7 @@
   .hero h2 em{font-style:italic;color:var(--amethyst);}
   .hero p{
     max-width:52ch;margin:22px auto 0;color:var(--ink-soft);font-size:17px;line-height:1.6;
+    text-wrap:pretty;
   }
 
   /* hero demo — a live, auto-playing focal stream so the product sells itself above the fold */
@@ -235,7 +235,7 @@
 
   /* founder note — the one piece of proof, kept honest and first-person */
   .founder{max-width:600px;margin:56px auto 0;text-align:center;padding:0 12px;}
-  .founder-quote{font-family:var(--font-display);font-stretch:118%;font-style:italic;font-weight:300;font-size:19px;line-height:1.55;color:var(--ink);}
+  .founder-quote{font-family:var(--font-display);font-stretch:118%;font-style:italic;font-weight:300;font-size:19px;line-height:1.55;color:var(--ink);text-wrap:balance;}
   .founder-sig{margin-top:14px;font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:var(--ink-mute);}
 
   .dropzone{
@@ -284,7 +284,10 @@
   }
   textarea#paste:focus{outline:none;border-color:var(--amethyst);}
   textarea#paste::placeholder{color:var(--ink-mute);font-style:italic;}
-  .paste-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:12px;}
+  .paste-actions{display:flex;gap:16px;justify-content:flex-end;align-items:center;margin-top:12px;}
+  /* the demo loader is an aside, not a second call to action — one gold button per panel */
+  .demo-link{color:var(--ink-soft);border-bottom-color:var(--hair-strong);font-size:13.5px;padding:14px 2px;}
+  .demo-link:hover{color:var(--ink);filter:none;border-bottom-color:var(--ink-mute);}
 
   /* recent library — each row is a shell (border, clip) around a sliding face,
      with a Remove action pinned beneath the right edge (revealed by swiping) */
@@ -346,10 +349,20 @@
   .backup{max-width:680px;margin:36px auto 0;padding:22px 24px;border:1px solid var(--hair-soft);border-radius:var(--r-sm);background:transparent;text-align:center;transition:border-color var(--t) var(--ease-out), background var(--t) var(--ease-out);}
   .backup:hover{border-color:var(--hair);background:var(--surface);}
   .backup-head{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:10px;}
-  .backup-copy{color:var(--ink-soft);font-size:13.5px;line-height:1.6;max-width:52ch;margin:0 auto 16px;}
+  .backup-copy{color:var(--ink-soft);font-size:13.5px;line-height:1.6;max-width:52ch;margin:0 auto 16px;text-wrap:pretty;}
   .backup-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
   .backup-lock{display:flex;align-items:flex-start;gap:10px;max-width:52ch;margin:0 auto 14px;text-align:left;cursor:pointer;}
-  .backup-lock input{margin-top:3px;accent-color:var(--amethyst);flex:0 0 auto;width:15px;height:15px;cursor:pointer;}
+  .backup-lock input{
+    appearance:none;-webkit-appearance:none;margin-top:1px;flex:0 0 auto;
+    width:18px;height:18px;border-radius:5px;cursor:pointer;
+    border:1px solid var(--hair-strong);background:var(--surface-inset);
+    transition:background var(--t-fast) var(--ease-out),border-color var(--t-fast) var(--ease-out);
+  }
+  .backup-lock:hover input{border-color:var(--amethyst);}
+  .backup-lock input:checked{
+    background:var(--amethyst) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1026' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 12.5l5 5 10-11'/%3E%3C/svg%3E") center/12px no-repeat;
+    border-color:var(--amethyst);
+  }
   .backup-lock-text{display:flex;flex-direction:column;gap:2px;}
   .backup-lock-title{font-size:13.5px;color:var(--ink);}
   .backup-lock-sub{font-size:12px;color:var(--ink-mute);line-height:1.5;}
@@ -392,7 +405,7 @@
   .parsing-card h3{font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:22px;}
   .parsing-card p{color:var(--ink-mute);margin-top:8px;font-size:14px;}
   .parse-bar{width:280px;height:4px;border-radius:4px;background:rgba(255,255,255,0.08);margin:20px auto 0;overflow:hidden;}
-  .parse-bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amethyst-deep),var(--gold));transition:width .25s;}
+  .parse-bar i{display:block;height:100%;width:100%;transform:scaleX(0);transform-origin:left;background:linear-gradient(90deg,var(--amethyst-deep),var(--gold));transition:transform .25s var(--ease-out);}
   /* visual proof of the received file: type badge · name · size */
   .file-chip{
     display:inline-flex;align-items:center;gap:9px;margin:18px auto 0;max-width:300px;
@@ -655,7 +668,7 @@
   .faq details[open] summary::after{transform:rotate(45deg);}
   .faq summary:hover{color:var(--ink-bright);}
   .faq summary:focus-visible{outline:2px solid var(--amethyst);outline-offset:3px;border-radius:8px;}
-  .faq .fa{padding:0 4px 18px;color:var(--ink-soft);font-size:14px;line-height:1.65;max-width:60ch;}
+  .faq .fa{padding:0 4px 18px;color:var(--ink-soft);font-size:14px;line-height:1.65;max-width:60ch;text-wrap:pretty;}
 
   footer.site{text-align:center;color:var(--ink-mute);font-size:12.5px;padding:40px 0 32px;letter-spacing:.3px;}
   footer.site a{color:var(--ink-soft);text-decoration:none;border-bottom:1px solid var(--hair);}
@@ -1100,7 +1113,7 @@
   .pc-desc{font-size:var(--fs-xs);color:var(--ink-soft);line-height:var(--lh-ui);}
   .pc-amt{text-align:right;font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:var(--fs-lg);color:var(--gold);}
   .pc-amt em{display:block;font-style:normal;font-family:"Spline Sans",sans-serif;font-size:var(--fs-2xs);letter-spacing:0.6px;color:var(--ink-mute);}
-  @media (max-width:560px){ .patron-card{flex-wrap:wrap;} .pc-amt{width:100%;text-align:left;} }
+  @media (max-width:560px){ .patron-card{flex-wrap:wrap;} .pc-amt{width:100%;text-align:center;} }
 
   /* lifetime badge chip in the header */
   .patron-chip{

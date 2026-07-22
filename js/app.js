@@ -1218,7 +1218,7 @@ function formatBytes(n){
 // fileMeta {kind,name,size} shows a proof-of-file chip; omit it for non-file work (export/import).
 function showParse(t,s,fileMeta){
   $("parseTitle").textContent=t; $("parseSub").textContent=s;
-  $("parseFill").style.width="0%"; $("parsePct").textContent="0%"; $("parseEta").textContent="";
+  $("parseFill").style.transform="scaleX(0)"; $("parsePct").textContent="0%"; $("parseEta").textContent="";
   parseStart=Date.now();
   const chip=$("fileChip");
   if(fileMeta){
@@ -1231,7 +1231,7 @@ function showParse(t,s,fileMeta){
 }
 function setParse(p){
   const pct=Math.max(0,Math.min(1,p));
-  $("parseFill").style.width=Math.round(pct*100)+"%";
+  $("parseFill").style.transform="scaleX("+Math.min(1,Math.max(0,pct))+")";
   $("parsePct").textContent=Math.round(pct*100)+"%";
   // honest time-left: extrapolate from elapsed once there's enough signal to be truthful
   if(parseStart && pct>0.06){
@@ -1958,7 +1958,7 @@ function init(){
   try{
     const prefs=JSON.parse(localStorage.getItem("fp_prefs")||"{}");
     if(prefs.wpm) setWpm(prefs.wpm); if(prefs.size) setSize(prefs.size);
-    if(prefs.mode) setMode(prefs.mode);
+    if(prefs.mode) S.mode=prefs.mode;
     if(typeof prefs.countdown==="boolean") settings.countdown=prefs.countdown;
     if(typeof prefs.context==="boolean") settings.context=prefs.context;
     if(typeof prefs.smartPacing==="boolean") settings.smartPacing=prefs.smartPacing;
@@ -1968,7 +1968,9 @@ function init(){
     if(prefs.theme) applyTheme((isPatron() || !isPatronTheme(prefs.theme)) ? prefs.theme : "midnight");
   }catch(e){}
   // a persisted-open panel is fine inline on desktop, but a surprise modal on a phone
-  setSize(S.size); setWpm(S.wpm); applyAids(); setSettingsOpen(isSheet() ? false : settings.moreOpen);
+  // setMode always runs so the default mode's UI invariants (chunk leaves the
+  // panel in ORP) hold on a first visit, before any pref exists
+  setSize(S.size); setWpm(S.wpm); setMode(S.mode); applyAids(); setSettingsOpen(isSheet() ? false : settings.moreOpen);
   buildThemeSeg();
 
   renderLibrary(); renderStreak();
