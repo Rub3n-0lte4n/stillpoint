@@ -78,3 +78,43 @@ test("milestoneLine adds only clean milestone clauses", () => {
   assert.equal(milestoneLine(7, 12), "Chapter 7 of 12. Halfway.");   // 6 done of 12
   assert.equal(milestoneLine(12, 12), "Chapter 12 of 12. Almost there.");
 });
+
+const { Reward } = await import("../js/reward.js");
+
+test("Reward.credit persists and reports newlyEarned exactly once", async () => {
+  await Reward.hydrate();
+  assert.equal(Reward.credit("bookA", 0).newlyEarned, true);
+  assert.equal(Reward.credit("bookA", 0).newlyEarned, false);   // idempotent
+  assert.deepEqual(Reward.forDoc("bookA").chapters, [0]);
+});
+
+test("Reward.finish + shelf surface finished books, most recent first", async () => {
+  await Reward.hydrate();
+  Reward.note("b1", { bounds:[0,10], total:20000, title:"One", kind:"epub" });
+  Reward.note("b2", { bounds:[0,10], total:90000, title:"Two", kind:"epub" });
+  Reward.finish("b1", 1, 1000);
+  Reward.finish("b2", 1, 2000);
+  const s = Reward.shelf();
+  assert.equal(s.length, 2);
+  assert.equal(s[0].key, "b2");                 // most recent first
+});
+
+test("hydrate reloads persisted records from IndexedDB", async () => {
+  Reward.note("keep", { bounds:[0,5], total:10, title:"K", kind:"pdf" });
+  Reward.credit("keep", 0);                     // read chapter 0 during the session
+  Reward.finish("keep", 1, 500);                // finished on the last chapter
+  await Reward.hydrate();                        // drops the cache, reloads from store
+  const r = Reward.forDoc("keep");
+  assert.equal(r.finishedAt, 500);
+  assert.deepEqual(r.chapters, [0, 1]);
+});
+
+test("exportAll / importMerge round-trips and unions", async () => {
+  await Reward.hydrate();
+  Reward.credit("mix", 0);
+  const dump = Reward.exportAll().filter(e => e.key === "mix");
+  await Reward.hydrate();                        // fresh cache
+  Reward.credit("mix", 1);
+  Reward.importMerge(dump);
+  assert.deepEqual(Reward.forDoc("mix").chapters, [0, 1]);
+});

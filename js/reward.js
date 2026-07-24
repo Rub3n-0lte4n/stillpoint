@@ -96,3 +96,65 @@ export function milestoneLine(entering, total){
   if(entering === total) return base + " Almost there.";
   return base;
 }
+
+/* ---- storage-backed API (in-memory cache + IndexedDB write-through) ---- */
+
+const cache = new Map();   // docKey -> rec
+
+function normalize(v, key){
+  const r = freshRec(key);
+  if(v && typeof v === "object"){
+    if(Array.isArray(v.chapters)) r.chapters = v.chapters.filter(Number.isInteger).sort((a, b) => a - b);
+    if(Array.isArray(v.bounds)) r.bounds = v.bounds.slice();
+    if(typeof v.total === "number") r.total = v.total;
+    if(typeof v.title === "string") r.title = v.title;
+    if(typeof v.kind === "string") r.kind = v.kind;
+    if(typeof v.finishedAt === "number") r.finishedAt = v.finishedAt;
+  }
+  return r;
+}
+function stripKey(rec){ const { key, ...rest } = rec; return rest; }   // key is redundant on disk
+function persist(key, rec){ try{ Store.put(PFX + key, stripKey(rec)); }catch(e){} }
+
+export const Reward = {
+  async hydrate(){
+    cache.clear();
+    try{
+      const rows = await Store.getAllByPrefix(PFX);
+      for(const { key, val } of rows) cache.set(key, normalize(val, key));
+    }catch(e){}
+  },
+  forDoc(key){ return cache.get(key) || null; },
+  note(key, meta){
+    const rec = cache.get(key) || freshRec(key);
+    if(meta && meta.bounds) rec.bounds = meta.bounds.slice();
+    if(meta && meta.total) rec.total = meta.total;
+    if(meta && meta.title) rec.title = meta.title;
+    if(meta && meta.kind) rec.kind = meta.kind;
+    rec.key = key;
+    cache.set(key, rec); persist(key, rec);
+  },
+  credit(key, k){
+    const before = cache.get(key) || freshRec(key);
+    const had = before.chapters.includes(k);
+    const rec = creditChapter(before, k); rec.key = key;
+    cache.set(key, rec); persist(key, rec);
+    return { newlyEarned: !had };
+  },
+  finish(key, lastK, when = Date.now()){
+    const before = cache.get(key) || freshRec(key);
+    const rec = markFinished(before, lastK, when); rec.key = key;
+    cache.set(key, rec); persist(key, rec);
+  },
+  shelf(){ return shelfEntries([...cache.values()]); },
+  exportAll(){ return [...cache.entries()].map(([key, rec]) => ({ key, rec: stripKey(rec) })); },
+  importMerge(list){
+    if(!Array.isArray(list)) return;
+    for(const item of list){
+      if(!item || !item.key) continue;
+      const merged = mergeRead(cache.get(item.key), normalize(item.rec, item.key));
+      merged.key = item.key;
+      cache.set(item.key, merged); persist(item.key, merged);
+    }
+  },
+};

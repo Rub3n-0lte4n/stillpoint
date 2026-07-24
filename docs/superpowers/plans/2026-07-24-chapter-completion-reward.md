@@ -402,7 +402,8 @@ test("Reward.finish + shelf surface finished books, most recent first", async ()
 
 test("hydrate reloads persisted records from IndexedDB", async () => {
   Reward.note("keep", { bounds:[0,5], total:10, title:"K", kind:"pdf" });
-  Reward.finish("keep", 1, 500);
+  Reward.credit("keep", 0);                     // read chapter 0 during the session
+  Reward.finish("keep", 1, 500);                // finished on the last chapter
   await Reward.hydrate();                        // drops the cache, reloads from store
   const r = Reward.forDoc("keep");
   assert.equal(r.finishedAt, 500);
