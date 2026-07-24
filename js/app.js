@@ -1,6 +1,7 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
 import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt, rewindTarget } from "./text.js";
 import { Haptics } from "./haptics.js";
+import { Reward, spineBands, milestoneLine } from "./reward.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
 import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
@@ -1089,6 +1090,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   S.chapters = chapterGrid(kind, S.nav, S.units, tokens.length);
   S.curCh = -1;   // first updateProgress sets the meta line
   S.title=title; S.meta=meta; S.key=key; S.index=0;
+  Reward.note(S.key, { bounds: S.chapters.map(c => c.start), total: S.tokens.length, title: S.title, kind });
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   S.pausedAt=null;   // the away-clock belongs to the previous document's stream
   updateGoalWhisper();   // no stale goal line survives a book switch
@@ -1715,6 +1717,7 @@ async function shareResult(){
 
 /* ---------------- wiring ---------------- */
 function init(){
+  Reward.hydrate().then(()=>{ renderLibrary(); });
   const dz=$("dropzone"), fi=$("fileInput");
   dz.onclick=()=>fi.click();
   dz.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); fi.click(); }});
