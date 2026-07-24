@@ -56,7 +56,7 @@ const $ = (id) => document.getElementById(id);
 const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
-const settings = { countdown:true, context:true, smartPacing:true, zen:true, moreOpen:false };  // reading aids + dock state (persisted)
+const settings = { countdown:true, context:true, smartPacing:true, zen:true, moreOpen:false, pauseChapters:false };  // reading aids + dock state (persisted)
 
 /* keep the screen awake while streaming — phones otherwise dim and lock mid-chapter,
    because reading here never touches the screen */
@@ -1509,6 +1509,7 @@ async function restoreBackup(data){
         if(typeof data.prefs.context==="boolean")   settings.context   = data.prefs.context;
         if(typeof data.prefs.smartPacing==="boolean") settings.smartPacing = data.prefs.smartPacing;
         if(typeof data.prefs.zen==="boolean") settings.zen = data.prefs.zen;
+        if(typeof data.prefs.pauseChapters==="boolean") settings.pauseChapters = data.prefs.pauseChapters;
         applyAids();
       }catch(e){}
     }
@@ -2047,6 +2048,7 @@ function init(){
     if(typeof prefs.context==="boolean") settings.context=prefs.context;
     if(typeof prefs.smartPacing==="boolean") settings.smartPacing=prefs.smartPacing;
     if(typeof prefs.zen==="boolean") settings.zen=prefs.zen;
+    if(typeof prefs.pauseChapters==="boolean") settings.pauseChapters=prefs.pauseChapters;
     if(typeof prefs.moreOpen==="boolean") settings.moreOpen=prefs.moreOpen;
     // patron themes survive restarts, but never boot a locked theme into the pitch modal
     if(prefs.theme) applyTheme((isPatron() || !isPatronTheme(prefs.theme)) ? prefs.theme : "midnight");
@@ -2073,7 +2075,7 @@ function init(){
 
   // Persist prefs on every "might be leaving" signal — beforeunload alone never
   // fires on iOS Safari / standalone PWA, which would silently drop settings there.
-  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,zen:settings.zen,moreOpen:settings.moreOpen,theme})); }catch(e){} };
+  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,zen:settings.zen,moreOpen:settings.moreOpen,pauseChapters:settings.pauseChapters,theme})); }catch(e){} };
   window.addEventListener("beforeunload",savePrefs);
   // a killed tab mid-play still credits the segment to the streak ledger
   // (and gets its exact position written past the streaming-save pacing)
