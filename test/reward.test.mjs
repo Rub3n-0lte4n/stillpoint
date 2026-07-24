@@ -33,3 +33,48 @@ test("mergeRead unions chapters and keeps the earliest finish", () => {
   assert.deepEqual(m.bounds, [0,5]);          // metadata from the side that has it
   assert.equal(m.title, "L");
 });
+
+const { spineBands, spineHeight, shelfEntries, milestoneLine } = await import("../js/reward.js");
+
+test("spineBands classifies done, current, and unread segments", () => {
+  const rec = { ...freshRec("x"), chapters:[0], bounds:[0,100,200], total:300 };
+  const bands = spineBands(rec, 150);         // read into segment 1 (100..200), segment 2 unread
+  assert.equal(bands.length, 3);
+  assert.equal(bands[0].state, "done");
+  assert.equal(bands[1].state, "current");
+  assert.equal(bands[1].fill, 0.5);           // (150-100)/(200-100)
+  assert.equal(bands[2].state, "unread");
+});
+
+test("spineBands treats a no-ToC book as one whole-book segment", () => {
+  const rec = { ...freshRec("x"), chapters:[], bounds:[0], total:500 };
+  const bands = spineBands(rec, 250);
+  assert.equal(bands.length, 1);
+  assert.equal(bands[0].state, "current");
+  assert.equal(bands[0].fill, 0.5);
+});
+
+test("spineHeight is clamped and grows with length", () => {
+  assert.equal(spineHeight(9000), 52);        // floor
+  assert.equal(spineHeight(150000), 118);     // ceiling
+  assert.ok(spineHeight(50000) > 52 && spineHeight(50000) < 118);
+  assert.ok(spineHeight(80000) > spineHeight(30000));
+});
+
+test("shelfEntries returns finished books, most recent first", () => {
+  const recs = [
+    { ...freshRec("a"), title:"A", total:20000, finishedAt:1000 },
+    { ...freshRec("b"), title:"B", total:90000, finishedAt:3000 },
+    { ...freshRec("c"), title:"C", total:40000, finishedAt:null },   // unfinished, excluded
+  ];
+  const s = shelfEntries(recs);
+  assert.equal(s.length, 2);
+  assert.equal(s[0].key, "b");                // 3000 > 1000
+  assert.equal(s[0].height, spineHeight(90000));
+});
+
+test("milestoneLine adds only clean milestone clauses", () => {
+  assert.equal(milestoneLine(4, 12), "Chapter 4 of 12.");
+  assert.equal(milestoneLine(7, 12), "Chapter 7 of 12. Halfway.");   // 6 done of 12
+  assert.equal(milestoneLine(12, 12), "Chapter 12 of 12. Almost there.");
+});
