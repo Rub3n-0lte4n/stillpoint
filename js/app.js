@@ -405,6 +405,7 @@ function maybeHint(where){
 // Reached the end — show the session summary.
 function finish(){
   pause();
+  Reward.finish(S.key, S.curCh, Date.now());
   // Belief 5: value has now been given — the header Support pill may appear from here on.
   try{ localStorage.setItem("fp_finished_v1","1"); }catch(e){}
   $("supportPill").classList.remove("hidden");
@@ -782,6 +783,13 @@ function exportHighlights(){
 
 /* ---------------- progress + scrubber ---------------- */
 function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
+// A chapter was just finished by reading (entering segment k of `grid`). Task 8
+// replaces this stand-in with the real seam beat.
+function onChapterEarned(k, grid){
+  const total = grid.length;
+  const entering = k + 1;                       // 1-based chapter now beginning
+  window.__lastBeat = { finishedIdx: k - 1, entering, title: (grid[k] && grid[k].title) || null };
+}
 let progressPaintAt=0;
 // `throttled` comes only from the streaming loop: the scrubber repaint is a
 // real layout per write, and a hairline moving 5x a second reads identically
@@ -806,7 +814,17 @@ function updateProgress(throttled){
   }
   // the top-right meta line names the chapter the bar describes (book-scope
   // documents keep the static parse meta: "EPUB · 12 chapters · 84,120 words")
-  if(k !== S.curCh){ S.curCh = k; $("docMeta").textContent = seg.title || S.meta; }
+  if(k !== S.curCh){
+    // Earned only by reading across a boundary: throttled === true is the streaming
+    // loop; scrubs/jumps call updateProgress untruthed. curCh starts at -1 (pre-first
+    // chapter), so require >= 0 before crediting.
+    if(throttled && k > S.curCh && S.curCh >= 0){
+      let earned = false;
+      for(let c = S.curCh; c < k; c++){ if(Reward.credit(S.key, c).newlyEarned) earned = true; }
+      if(earned) onChapterEarned(k, grid);
+    }
+    S.curCh = k; $("docMeta").textContent = seg.title || S.meta;
+  }
   if(S.units.length>1){
     let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=S.index) u=k; }
     if(u!==S.curUnit && !$("toc").hasAttribute("inert")) renderToc();

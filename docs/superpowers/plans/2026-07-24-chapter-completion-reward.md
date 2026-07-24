@@ -585,7 +585,8 @@ with:
 
 ```js
   if(k !== S.curCh){
-    if(throttled && k > S.curCh){
+    // curCh starts at -1 (pre-first chapter), so require >= 0 before crediting.
+    if(throttled && k > S.curCh && S.curCh >= 0){
       let earned = false;
       for(let c = S.curCh; c < k; c++){ if(Reward.credit(S.key, c).newlyEarned) earned = true; }
       if(earned) onChapterEarned(k, grid);   // beat hooks here (Task 8)
