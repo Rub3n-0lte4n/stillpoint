@@ -1133,13 +1133,12 @@ function renderShelf(){
   const items = Reward.shelf();
   sec.classList.toggle("hidden", items.length === 0);
   row.innerHTML = items.map((b, i) => {
-    const bands = Math.max(3, Math.min(14, Math.round((b.total || 0) / 9000)));
-    const bp = (b.height / bands).toFixed(2);
-    const grain = `repeating-linear-gradient(to bottom, rgba(5,3,8,.4) 0px, rgba(5,3,8,.4) 1px, transparent 1px, transparent ${bp}px)`;
     const name = esc((b.title || "This book") + ", finished");
+    // The title only rides the spine when the spine is thick enough to carry it.
+    const label = b.w >= 16 ? `<span class="sp-title" aria-hidden="true">${esc(b.title || "")}</span>` : "";
     return `<button type="button" class="shelf-spine${i === 0 ? " shelf-latest" : ""}" data-key="${esc(b.key)}"`
-      + ` style="height:${b.height}px;background-image:${grain},linear-gradient(180deg,var(--amethyst),var(--amethyst-deep))"`
-      + ` title="${name}" aria-label="${name}"></button>`;
+      + ` style="--sp-w:${b.w}px;--sp-h:${b.h}px;--sp-tint:${b.tint}deg"`
+      + ` title="${name}" aria-label="${name}">${label}</button>`;
   }).join("");
   row.querySelectorAll(".shelf-spine").forEach(el => el.onclick = () => openByKey(el.dataset.key));
 }

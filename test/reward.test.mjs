@@ -34,7 +34,7 @@ test("mergeRead unions chapters and keeps the earliest finish", () => {
   assert.equal(m.title, "L");
 });
 
-const { creditRange, spineBands, spineHeight, shelfEntries, milestoneLine } = await import("../js/reward.js");
+const { creditRange, spineBands, spineThickness, spineStature, spineTint, shelfEntries, milestoneLine } = await import("../js/reward.js");
 
 test("creditRange: only a streaming forward crossing earns a chapter", () => {
   assert.deepEqual(creditRange(true, 0, 1), [0]);        // read across one boundary
@@ -63,11 +63,23 @@ test("spineBands treats a no-ToC book as one whole-book segment", () => {
   assert.equal(bands[0].fill, 0.5);
 });
 
-test("spineHeight is clamped and grows with length", () => {
-  assert.equal(spineHeight(9000), 52);        // floor
-  assert.equal(spineHeight(150000), 118);     // ceiling
-  assert.ok(spineHeight(50000) > 52 && spineHeight(50000) < 118);
-  assert.ok(spineHeight(80000) > spineHeight(30000));
+test("spineThickness is clamped and grows with length", () => {
+  assert.equal(spineThickness(9000), 12);       // floor
+  assert.equal(spineThickness(150000), 34);     // ceiling
+  assert.ok(spineThickness(50000) > 12 && spineThickness(50000) < 34);
+  assert.ok(spineThickness(80000) > spineThickness(30000));
+});
+
+test("spineStature is stable per book, varied between books, and bounded", () => {
+  assert.equal(spineStature("a"), spineStature("a"));      // same book, same height
+  const hs = ["a","b","c","d","e","f"].map(spineStature);
+  assert.ok(new Set(hs).size > 1);                          // not all identical
+  assert.ok(hs.every(h => h >= 66 && h <= 96));
+});
+
+test("spineTint is stable per book and stays near the accent", () => {
+  assert.equal(spineTint("a"), spineTint("a"));
+  assert.ok(["a","b","c","d"].every(k => Math.abs(spineTint(k)) <= 22));
 });
 
 test("shelfEntries returns finished books, most recent first", () => {
@@ -79,7 +91,8 @@ test("shelfEntries returns finished books, most recent first", () => {
   const s = shelfEntries(recs);
   assert.equal(s.length, 2);
   assert.equal(s[0].key, "b");                // 3000 > 1000
-  assert.equal(s[0].height, spineHeight(90000));
+  assert.equal(s[0].w, spineThickness(90000));
+  assert.equal(s[0].h, spineStature("b"));
 });
 
 test("milestoneLine adds only clean milestone clauses", () => {

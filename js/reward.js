@@ -83,19 +83,45 @@ export function spineBands(rec, index){
   });
 }
 
-// Shelf spine height in px: sqrt-scaled between a short and long book, clamped.
-export function spineHeight(total, opts){
-  const { min = 52, max = 118, wlo = 9000, whi = 150000 } = opts || {};
+// A small stable hash, so a book's spine looks the same every session.
+function keyHash(s){
+  let h = 2166136261;
+  const str = String(s || "");
+  for(let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/* Length is carried by THICKNESS, the way it is on a real shelf: a long book is a
+   thick book. Height varies only a little and is not tied to length, because
+   uniform bars whose height encodes a quantity is the grammar of a bar chart,
+   which is exactly what this must not look like. */
+export function spineThickness(total, opts){
+  const { min = 12, max = 34, wlo = 9000, whi = 150000 } = opts || {};
   const s = Math.sqrt(Math.max(1, total || 0));
   const lo = Math.sqrt(wlo), hi = Math.sqrt(whi);
   const t = Math.max(0, Math.min(1, (s - lo) / (hi - lo)));
   return Math.round(min + t * (max - min));
 }
 
+// Books stand at similar heights with some variation. Deterministic per book.
+export function spineStature(key, opts){
+  const { min = 66, max = 96 } = opts || {};
+  return min + (keyHash("h:" + key) % (max - min + 1));
+}
+
+// A few degrees of hue either side of the theme accent: individual, still tonal.
+export function spineTint(key, spread = 22){
+  const h = keyHash("t:" + key) % 1001;
+  return Math.round(((h / 1000) * 2 - 1) * spread);
+}
+
 export function shelfEntries(records){
   return (records || [])
     .filter(r => r && r.finishedAt != null)
-    .map(r => ({ key: r.key, title: r.title, kind: r.kind, total: r.total, finishedAt: r.finishedAt, height: spineHeight(r.total) }))
+    .map(r => ({
+      key: r.key, title: r.title, kind: r.kind, total: r.total, finishedAt: r.finishedAt,
+      w: spineThickness(r.total), h: spineStature(r.key), tint: spineTint(r.key),
+    }))
     .sort((a, b) => b.finishedAt - a.finishedAt);
 }
 
