@@ -1026,16 +1026,23 @@ let openLibRow=null;   // at most one row rests open on its Remove action
 // preserves their listeners, same trick as placeModeCtrl.
 function placeShelf(hasBooks){
   const hero=document.querySelector("#landing .hero");
-  const recent=$("recent"), streak=$("streakStrip");
+  const recent=$("recent"), streak=$("streakStrip"), finished=$("shelf");
   if(!hero || !recent || !streak) return;
+  // what you're reading, how you're doing, what you've finished
+  const order = finished ? [recent, streak, finished] : [recent, streak];
   if(hasBooks){
-    if(recent.nextElementSibling!==streak || streak.nextElementSibling!==hero){
-      hero.parentNode.insertBefore(recent, hero);
-      hero.parentNode.insertBefore(streak, hero);
+    let placed = true;
+    for(let i=0;i<order.length;i++){
+      const next = i+1<order.length ? order[i+1] : hero;
+      if(order[i].nextElementSibling!==next){ placed=false; break; }
     }
+    if(!placed) for(const n of order) hero.parentNode.insertBefore(n, hero);
   } else {
     const paste=document.querySelector("#landing .paste-shell");
-    if(paste && paste.nextElementSibling!==recent){ paste.after(recent); recent.after(streak); }
+    if(paste && paste.nextElementSibling!==recent){
+      let prev = paste;
+      for(const n of order){ prev.after(n); prev = n; }
+    }
   }
 }
 // Segmented chapter spine for a library row / the finish card. Falls back to a
@@ -1047,11 +1054,11 @@ function spineHTML(rec, index, total, cls){
   if(!bands || bands.length < 2){
     const t = (rec && rec.total) || total || 0;
     const pct = t ? Math.min(100, Math.round((index / t) * 100)) : 0;
-    return `<div class="${klass}" aria-hidden="true"><div class="sg cur"><i style="width:${pct}%"></i></div></div>`;
+    return `<div class="${klass}" aria-hidden="true"><div class="sg is-cur"><i style="width:${pct}%"></i></div></div>`;
   }
   const segs = bands.map(b =>
-    b.state === "done" ? `<div class="sg done"></div>`
-    : b.state === "current" ? `<div class="sg cur"><i style="width:${Math.round(b.fill * 100)}%"></i></div>`
+    b.state === "done" ? `<div class="sg is-done"></div>`
+    : b.state === "current" ? `<div class="sg is-cur"><i style="width:${Math.round(b.fill * 100)}%"></i></div>`
     : `<div class="sg"></div>`).join("");
   return `<div class="${klass}" aria-hidden="true">${segs}</div>`;
 }
@@ -1131,7 +1138,7 @@ function renderShelf(){
     const bp = (b.height / bands).toFixed(2);
     const grain = `repeating-linear-gradient(to bottom, rgba(5,3,8,.4) 0px, rgba(5,3,8,.4) 1px, transparent 1px, transparent ${bp}px)`;
     const name = esc((b.title || "This book") + ", finished");
-    return `<button type="button" class="shelf-spine${i === 0 ? " recent" : ""}" data-key="${esc(b.key)}"`
+    return `<button type="button" class="shelf-spine${i === 0 ? " shelf-latest" : ""}" data-key="${esc(b.key)}"`
       + ` style="height:${b.height}px;background-image:${grain},linear-gradient(180deg,var(--amethyst),var(--amethyst-deep))"`
       + ` title="${name}" aria-label="${name}"></button>`;
   }).join("");

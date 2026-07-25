@@ -330,7 +330,7 @@
 
   /* reading streak — a quiet strip: today's ring, the count, the goal stepper */
   .streak{max-width:680px;margin:36px auto 0;}
-  .streak h4{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;text-align:center;}
+  .streak h4,.shelf h4{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;text-align:center;}
   .streak-row{
     display:flex;align-items:center;justify-content:center;gap:20px;flex-wrap:wrap;
     padding:16px 22px;border:1px solid var(--hair);border-radius:var(--r-md);
@@ -1174,31 +1174,39 @@
 /* Chapter-segmented spine — earned chapters as ink, one band each. */
 .spine{display:flex;gap:3px;height:8px;padding:3px;border-radius:6px;
   background:var(--surface-inset);box-shadow:inset 0 1px 3px rgba(0,0,0,.4);}
+/* State classes are prefixed: a bare .done here would inherit the finish
+   overlay's display:none and collapse the band. */
 .spine .sg{flex:1;border-radius:2px;background:color-mix(in srgb,var(--ink) 9%,transparent);}
-.spine .sg.done{background:linear-gradient(90deg,var(--amethyst-deep),var(--amethyst));
+.spine .sg.is-done{background:linear-gradient(90deg,var(--amethyst-deep),var(--amethyst));
   box-shadow:0 0 8px -2px color-mix(in srgb,var(--amethyst) 55%,transparent);}
-.spine .sg.cur{position:relative;overflow:hidden;}
-.spine .sg.cur i{position:absolute;inset:0;border-radius:2px;
+.spine .sg.is-cur{position:relative;overflow:hidden;}
+.spine .sg.is-cur i{position:absolute;inset:0;border-radius:2px;
   background:linear-gradient(90deg,var(--amethyst-deep),var(--amethyst));}
 /* On a library row the spine takes the old hairline's seat: a full-bleed bottom
    edge, so the row's flex layout and height are untouched. */
 .spine.spine-row{position:absolute;left:0;right:0;bottom:0;height:3px;padding:0;gap:2px;
   border-radius:0;background:none;box-shadow:none;pointer-events:none;}
 .spine.spine-row .sg{border-radius:0;}
-.spine.spine-row .sg.done{box-shadow:none;}
-.done-spine{max-width:280px;margin:14px auto 0;}
+.spine.spine-row .sg.is-done{box-shadow:none;}
+/* On the finish card the spine is the celebration, so it carries real weight
+   (8px bands) rather than the row's hairline. */
+.done-spine{max-width:280px;margin:16px auto 0;}
+.done-spine .spine{height:14px;gap:4px;border-radius:7px;}
+.done-spine .spine .sg{border-radius:3px;}
 
 /* Finished shelf — a row of length-scaled book spines standing together. */
 .shelf{max-width:680px;margin:36px auto 0;}
-.shelf-row{display:flex;align-items:flex-end;gap:12px;min-height:130px;padding:0 4px 2px;
-  border-bottom:1px solid var(--hair);box-shadow:0 1px 0 var(--hair-soft);overflow-x:auto;}
+/* The row is only as tall as the books standing in it, so a young shelf is not
+   a large empty box. Tall spines grow it on their own. */
+.shelf-row{display:flex;align-items:flex-end;justify-content:center;gap:12px;min-height:64px;
+  padding:0 4px 2px;border-bottom:1px solid var(--hair);box-shadow:0 1px 0 var(--hair-soft);overflow-x:auto;}
 .shelf-spine{width:17px;flex:0 0 auto;border-radius:3px 3px 2px 2px;padding:0;border:0;
   cursor:pointer;background-color:transparent;
   box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 20%,transparent),
     inset 0 0 0 1px color-mix(in srgb,var(--amethyst) 20%,transparent),0 6px 14px -8px rgba(0,0,0,.7);
   transition:transform var(--t) var(--ease-out);}
 .shelf-spine:hover{transform:translateY(-3px);}
-.shelf-spine.recent{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--gold) 50%,transparent),
+.shelf-spine.shelf-latest{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--gold) 50%,transparent),
     inset 0 0 0 1px color-mix(in srgb,var(--gold) 28%,transparent),
     0 0 16px -6px color-mix(in srgb,var(--gold) 55%,transparent),0 6px 14px -8px rgba(0,0,0,.7);}
 .shelf-spine:focus-visible{outline:2px solid var(--focus);outline-offset:2px;}
