@@ -1433,7 +1433,7 @@ async function buildBackup(passphrase){
     try{ const bm = await Store.getBlockMode(item.key); if(bm) blockModes[item.key]=bm; }catch(e){}
     try{ const hl = await Store.getHighlights(item.key); if(hl) highlights[item.key]=hl; }catch(e){}
   }
-  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights, streak:Streak.raw()||undefined };
+  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights, streak:Streak.raw()||undefined, reward:Reward.exportAll() };
   // With a passphrase the whole bundle becomes the ciphertext of an envelope, so
   // a backup sitting in a cloud drive is a sealed file rather than your books.
   let text = JSON.stringify(backup);
@@ -1573,6 +1573,7 @@ async function restoreBackup(data){
       }catch(e){}
     }
     if(data.streak) Streak.importMerge(data.streak);
+    if(data.reward) Reward.importMerge(data.reward);
     hideParse(); renderLibrary(); renderStreak();
     toast(`Imported ${restored} book${restored===1?"":"s"} into your library.`);
   }catch(err){ hideParse(); toast("Couldn't import that backup: "+(err&&err.message?err.message:err), {error:true}); }
