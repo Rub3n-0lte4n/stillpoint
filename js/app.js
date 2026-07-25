@@ -1063,7 +1063,9 @@ function renderLibrary(){
   $("backup").classList.toggle("hidden", lib.length===0);
   openLibRow=null;
   list.innerHTML="";
-  if(lib.length===0){ box.classList.add("hidden"); return; }
+  // A finished book outlives the recent list (and its cap), so the shelf still
+  // paints when there is nothing left to continue.
+  if(lib.length===0){ box.classList.add("hidden"); renderShelf(); return; }
   box.classList.remove("hidden");
   lib.forEach(item=>{
     const pct = item.total ? Math.min(100, Math.round(item.index/item.total*100)) : 0;
@@ -1116,6 +1118,32 @@ function renderLibrary(){
     el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); if(!sw.consumed()) commit(); };
     list.appendChild(el);
   });
+  renderShelf();
+}
+// The finished shelf: one length-scaled spine per finished book, most recent first.
+// Only finished books stand here — there are no empty slots and nothing to shame.
+function renderShelf(){
+  const sec = $("shelf"), row = $("shelfRow"); if(!sec || !row) return;
+  const items = Reward.shelf();
+  sec.classList.toggle("hidden", items.length === 0);
+  row.innerHTML = items.map((b, i) => {
+    const bands = Math.max(3, Math.min(14, Math.round((b.total || 0) / 9000)));
+    const bp = (b.height / bands).toFixed(2);
+    const grain = `repeating-linear-gradient(to bottom, rgba(5,3,8,.4) 0px, rgba(5,3,8,.4) 1px, transparent 1px, transparent ${bp}px)`;
+    const name = esc((b.title || "This book") + ", finished");
+    return `<button type="button" class="shelf-spine${i === 0 ? " recent" : ""}" data-key="${esc(b.key)}"`
+      + ` style="height:${b.height}px;background-image:${grain},linear-gradient(180deg,var(--amethyst),var(--amethyst-deep))"`
+      + ` title="${name}" aria-label="${name}"></button>`;
+  }).join("");
+  row.querySelectorAll(".shelf-spine").forEach(el => el.onclick = () => openByKey(el.dataset.key));
+}
+// Reopen a finished book from the shelf. Uses the live library record when the book
+// is still listed, otherwise a minimal item so openFromStore reports the memento
+// case ("isn't on this device anymore") instead of throwing.
+function openByKey(key){
+  const rec = Reward.forDoc(key);
+  const item = loadLib().find(x => x.key === key) || { key, title: (rec && rec.title) || "This book" };
+  openFromStore(item);
 }
 // Remove a library item, but defer deleting the cached file so "Undo" can restore it.
 function removeItem(item){

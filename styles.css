@@ -1188,6 +1188,22 @@
 .spine.spine-row .sg.done{box-shadow:none;}
 .done-spine{max-width:280px;margin:14px auto 0;}
 
+/* Finished shelf — a row of length-scaled book spines standing together. */
+.shelf{max-width:680px;margin:36px auto 0;}
+.shelf-row{display:flex;align-items:flex-end;gap:12px;min-height:130px;padding:0 4px 2px;
+  border-bottom:1px solid var(--hair);box-shadow:0 1px 0 var(--hair-soft);overflow-x:auto;}
+.shelf-spine{width:17px;flex:0 0 auto;border-radius:3px 3px 2px 2px;padding:0;border:0;
+  cursor:pointer;background-color:transparent;
+  box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 20%,transparent),
+    inset 0 0 0 1px color-mix(in srgb,var(--amethyst) 20%,transparent),0 6px 14px -8px rgba(0,0,0,.7);
+  transition:transform var(--t) var(--ease-out);}
+.shelf-spine:hover{transform:translateY(-3px);}
+.shelf-spine.recent{box-shadow:inset 0 1px 0 color-mix(in srgb,var(--gold) 50%,transparent),
+    inset 0 0 0 1px color-mix(in srgb,var(--gold) 28%,transparent),
+    0 0 16px -6px color-mix(in srgb,var(--gold) 55%,transparent),0 6px 14px -8px rgba(0,0,0,.7);}
+.shelf-spine:focus-visible{outline:2px solid var(--focus);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){ .shelf-spine{transition:none;} .shelf-spine:hover{transform:none;} }
+
 /* Chapter completion beat — a quiet breath at the seam, over the still point. */
 .cbeat{position:absolute;left:0;right:0;bottom:22%;display:flex;flex-direction:column;
   align-items:center;gap:8px;pointer-events:none;opacity:0;transform:translateY(6px);
