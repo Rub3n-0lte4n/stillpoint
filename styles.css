@@ -327,8 +327,6 @@
   .recent-item .ri-x:hover{color:var(--rose);background:rgba(240,166,200,0.12);}
   /* how far along you are, as a shape — the numbers above stay the detail.
      The modifier is "full", not "done" — .done is the session-complete overlay. */
-  .ri-bar{position:absolute;left:0;bottom:0;height:2px;background:var(--gold);opacity:.5;border-radius:0 2px 2px 0;pointer-events:none;}
-  .ri-bar.full{opacity:.9;}
 
   /* reading streak — a quiet strip: today's ring, the count, the goal stepper */
   .streak{max-width:680px;margin:36px auto 0;}
@@ -1172,6 +1170,23 @@
 
   /* theme segment: patron-only options carry a small gold mark until unlocked */
   #themeSeg button .lock{color:var(--gold);margin-left:4px;font-size:10px;}
+
+/* Chapter-segmented spine — earned chapters as ink, one band each. */
+.spine{display:flex;gap:3px;height:8px;padding:3px;border-radius:6px;
+  background:var(--surface-inset);box-shadow:inset 0 1px 3px rgba(0,0,0,.4);}
+.spine .sg{flex:1;border-radius:2px;background:color-mix(in srgb,var(--ink) 9%,transparent);}
+.spine .sg.done{background:linear-gradient(90deg,var(--amethyst-deep),var(--amethyst));
+  box-shadow:0 0 8px -2px color-mix(in srgb,var(--amethyst) 55%,transparent);}
+.spine .sg.cur{position:relative;overflow:hidden;}
+.spine .sg.cur i{position:absolute;inset:0;border-radius:2px;
+  background:linear-gradient(90deg,var(--amethyst-deep),var(--amethyst));}
+/* On a library row the spine takes the old hairline's seat: a full-bleed bottom
+   edge, so the row's flex layout and height are untouched. */
+.spine.spine-row{position:absolute;left:0;right:0;bottom:0;height:3px;padding:0;gap:2px;
+  border-radius:0;background:none;box-shadow:none;pointer-events:none;}
+.spine.spine-row .sg{border-radius:0;}
+.spine.spine-row .sg.done{box-shadow:none;}
+.done-spine{max-width:280px;margin:14px auto 0;}
 
 /* Chapter completion beat — a quiet breath at the seam, over the still point. */
 .cbeat{position:absolute;left:0;right:0;bottom:22%;display:flex;flex-direction:column;

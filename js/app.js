@@ -427,6 +427,7 @@ function finish(){
   // the review door only appears when something waits behind it
   const hl = S.highlights.length, rv = $("doneReview");
   if(rv){ rv.classList.toggle("hidden", hl===0); if(hl) rv.textContent = `Review ${hl} highlight${hl===1?"":"s"}`; }
+  $("doneSpine").innerHTML = spineHTML(Reward.forDoc(S.key), S.index, S.tokens.length);
   $("done").classList.add("show");
   $("doneLib").focus({preventScroll:true});   // move focus into the dialog
   nudgeQueued = true;   // nudge at the next clean moment (the library), never over this card
@@ -1037,6 +1038,23 @@ function placeShelf(hasBooks){
     if(paste && paste.nextElementSibling!==recent){ paste.after(recent); recent.after(streak); }
   }
 }
+// Segmented chapter spine for a library row / the finish card. Falls back to a
+// single continuous fill when a book has no real chapters (one whole-book segment)
+// or has not been opened under this feature yet (no reward record).
+function spineHTML(rec, index, total, cls){
+  const klass = "spine" + (cls ? " " + cls : "");
+  const bands = rec ? spineBands(rec, index) : null;
+  if(!bands || bands.length < 2){
+    const t = (rec && rec.total) || total || 0;
+    const pct = t ? Math.min(100, Math.round((index / t) * 100)) : 0;
+    return `<div class="${klass}" aria-hidden="true"><div class="sg cur"><i style="width:${pct}%"></i></div></div>`;
+  }
+  const segs = bands.map(b =>
+    b.state === "done" ? `<div class="sg done"></div>`
+    : b.state === "current" ? `<div class="sg cur"><i style="width:${Math.round(b.fill * 100)}%"></i></div>`
+    : `<div class="sg"></div>`).join("");
+  return `<div class="${klass}" aria-hidden="true">${segs}</div>`;
+}
 function renderLibrary(){
   const lib = loadLib();
   const box=$("recent"), list=$("recentList");
@@ -1066,7 +1084,7 @@ function renderLibrary(){
           <span class="ri-prog">${prog}</span>
         </button>
         <button type="button" class="ri-x" title="Remove" aria-label="Remove &ldquo;${esc(item.title)}&rdquo;">✕</button>
-        <i class="ri-bar${finished?" full":""}" style="width:${finished?100:pct}%" aria-hidden="true"></i>
+        ${spineHTML(Reward.forDoc(item.key), item.index, item.total, "spine-row")}
       </div>`;
     const face=el.querySelector(".ri-face");
     // deletion choreography: the face slides off, the row folds shut, then the
