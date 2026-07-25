@@ -1,7 +1,7 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
 import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt, rewindTarget } from "./text.js";
 import { Haptics } from "./haptics.js";
-import { Reward, spineBands, milestoneLine } from "./reward.js";
+import { Reward, creditRange, spineBands, milestoneLine } from "./reward.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
 import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
@@ -829,12 +829,11 @@ function updateProgress(throttled){
   // the top-right meta line names the chapter the bar describes (book-scope
   // documents keep the static parse meta: "EPUB · 12 chapters · 84,120 words")
   if(k !== S.curCh){
-    // Earned only by reading across a boundary: throttled === true is the streaming
-    // loop; scrubs/jumps call updateProgress untruthed. curCh starts at -1 (pre-first
-    // chapter), so require >= 0 before crediting.
-    if(throttled && k > S.curCh && S.curCh >= 0){
+    // Earned only by reading across a boundary (see creditRange in js/reward.js).
+    const due = creditRange(throttled, S.curCh, k);
+    if(due.length){
       let earned = false;
-      for(let c = S.curCh; c < k; c++){ if(Reward.credit(S.key, c).newlyEarned) earned = true; }
+      for(const c of due){ if(Reward.credit(S.key, c).newlyEarned) earned = true; }
       if(earned) onChapterEarned(k, grid);
     }
     S.curCh = k; $("docMeta").textContent = seg.title || S.meta;

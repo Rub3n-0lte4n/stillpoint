@@ -34,7 +34,16 @@ test("mergeRead unions chapters and keeps the earliest finish", () => {
   assert.equal(m.title, "L");
 });
 
-const { spineBands, spineHeight, shelfEntries, milestoneLine } = await import("../js/reward.js");
+const { creditRange, spineBands, spineHeight, shelfEntries, milestoneLine } = await import("../js/reward.js");
+
+test("creditRange: only a streaming forward crossing earns a chapter", () => {
+  assert.deepEqual(creditRange(true, 0, 1), [0]);        // read across one boundary
+  assert.deepEqual(creditRange(true, 2, 5), [2, 3, 4]);  // several at once, oldest first
+  assert.deepEqual(creditRange(false, 0, 4), []);        // scrubbed or jumped: nothing
+  assert.deepEqual(creditRange(true, 3, 1), []);         // moved backwards
+  assert.deepEqual(creditRange(true, 3, 3), []);         // no change
+  assert.deepEqual(creditRange(true, -1, 0), []);        // the pre-first-chapter step
+});
 
 test("spineBands classifies done, current, and unread segments", () => {
   const rec = { ...freshRec("x"), chapters:[0], bounds:[0,100,200], total:300 };

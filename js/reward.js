@@ -39,6 +39,18 @@ export function mergeRead(local, imported){
   };
 }
 
+/* The earned-not-scrubbed contract, in one place so it can be tested.
+   `throttled` is true only inside the streaming loop (js/app.js updateProgress),
+   so scrubs and jumps never earn a chapter. `prev` starts at -1 before the first
+   chapter, which is a position change rather than a chapter read. Returns the
+   chapter indices finished by this crossing, oldest first. */
+export function creditRange(throttled, prev, next){
+  if(!throttled || prev < 0 || next <= prev) return [];
+  const out = [];
+  for(let c = prev; c < next; c++) out.push(c);
+  return out;
+}
+
 // Chapter segments from bounds (start indices) + total. Always yields >= 1 segment,
 // always starts at 0, so a no-ToC book is one whole-book segment.
 function segmentsOf(rec){
