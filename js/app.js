@@ -317,6 +317,7 @@ function step(){
   S.timer = setTimeout(()=>{ if(S.playing) step(); }, delay);
 }
 function play(){
+  { const b = $("chapterBeat"); if(b){ b.classList.remove("on"); b.setAttribute("aria-hidden","true"); } }
   if(S.tokens.length===0) return;
   if(S.index>=S.tokens.length) S.index=0;
   // Back up by however long the reader was actually away: a glance costs a word
@@ -783,12 +784,24 @@ function exportHighlights(){
 
 /* ---------------- progress + scrubber ---------------- */
 function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
-// A chapter was just finished by reading (entering segment k of `grid`). Task 8
-// replaces this stand-in with the real seam beat.
+let beatTimer = null;
+// A chapter was just finished by reading. Take one designed breath at the seam.
 function onChapterEarned(k, grid){
   const total = grid.length;
-  const entering = k + 1;                       // 1-based chapter now beginning
-  window.__lastBeat = { finishedIdx: k - 1, entering, title: (grid[k] && grid[k].title) || null };
+  const entering = k + 1;                        // 1-based chapter now beginning
+  const title = (grid[k] && grid[k].title) || "";
+  Haptics.trigger("success");
+  if(document.hidden || $("done").classList.contains("show")) return;   // no visible beat if away or the finish card is up
+  const el = $("chapterBeat"); if(!el) return;
+  el.innerHTML = `<div class="cb-line"><span class="cb-check">✓</span>`
+    + `<span>${esc(milestoneLine(entering, total))}</span>`
+    + (title ? `<span class="cb-next">Entering “${esc(title)}”</span>` : ``)
+    + `</div>`;
+  el.setAttribute("aria-hidden", "false");
+  el.classList.add("on");
+  clearTimeout(beatTimer);
+  if(settings.pauseChapters){ pause(); }         // rest here until the reader resumes
+  else beatTimer = setTimeout(()=>{ el.classList.remove("on"); el.setAttribute("aria-hidden","true"); }, 1600);
 }
 let progressPaintAt=0;
 // `throttled` comes only from the streaming loop: the scrubber repaint is a
