@@ -1,7 +1,7 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
 import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt, rewindTarget } from "./text.js";
 import { Haptics } from "./haptics.js";
-import { Reward, creditRange, spineBands, milestoneLine } from "./reward.js";
+import { Reward, creditRange, spineBands, titleSize, milestoneLine } from "./reward.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
 import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
@@ -1134,10 +1134,10 @@ function renderShelf(){
   sec.classList.toggle("hidden", items.length === 0);
   row.innerHTML = items.map((b, i) => {
     const name = esc((b.title || "This book") + ", finished");
-    // The title only rides the spine when the spine is thick enough to carry it.
-    const label = b.w >= 16 ? `<span class="sp-title" aria-hidden="true">${esc(b.title || "")}</span>` : "";
+    // Every book carries its name; the type shrinks to fit before it truncates.
+    const label = b.title ? `<span class="sp-title" aria-hidden="true">${esc(b.title)}</span>` : "";
     return `<button type="button" class="shelf-spine${i === 0 ? " shelf-latest" : ""}" data-key="${esc(b.key)}"`
-      + ` style="--sp-w:${b.w}px;--sp-h:${b.h}px;--sp-tint:${b.tint}deg"`
+      + ` style="--sp-w:${b.w}px;--sp-h:${b.h}px;--sp-tint:${b.tint}deg;--sp-fs:${titleSize(b.title, b.h)}px"`
       + ` title="${name}" aria-label="${name}">${label}</button>`;
   }).join("");
   row.querySelectorAll(".shelf-spine").forEach(el => el.onclick = () => openByKey(el.dataset.key));

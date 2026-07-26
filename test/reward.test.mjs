@@ -34,7 +34,7 @@ test("mergeRead unions chapters and keeps the earliest finish", () => {
   assert.equal(m.title, "L");
 });
 
-const { creditRange, spineBands, spineThickness, spineStature, spineTint, shelfEntries, milestoneLine } = await import("../js/reward.js");
+const { creditRange, spineBands, spineThickness, spineStature, spineTint, titleSize, shelfEntries, milestoneLine } = await import("../js/reward.js");
 
 test("creditRange: only a streaming forward crossing earns a chapter", () => {
   assert.deepEqual(creditRange(true, 0, 1), [0]);        // read across one boundary
@@ -64,10 +64,20 @@ test("spineBands treats a no-ToC book as one whole-book segment", () => {
 });
 
 test("spineThickness is clamped and grows with length", () => {
-  assert.equal(spineThickness(9000), 12);       // floor
-  assert.equal(spineThickness(150000), 34);     // ceiling
-  assert.ok(spineThickness(50000) > 12 && spineThickness(50000) < 34);
+  assert.equal(spineThickness(9000), 16);       // floor: thin enough to carry a title
+  assert.equal(spineThickness(150000), 36);     // ceiling
+  assert.ok(spineThickness(50000) > 16 && spineThickness(50000) < 36);
   assert.ok(spineThickness(80000) > spineThickness(30000));
+  // every book is wide enough for its name, however short the book
+  assert.ok([500, 9000, 20000, 200000].every(t => spineThickness(t) >= 16));
+});
+
+test("titleSize fits the title to the spine, then floors it", () => {
+  assert.equal(titleSize("Autumn", 80), 10);            // short title, comfortable
+  assert.ok(titleSize("A Month in the Country", 80) < titleSize("Autumn", 80));
+  assert.equal(titleSize("A Very Long Title That Cannot Possibly Fit", 70), 6.5);  // floor
+  assert.ok(titleSize("Solaris", 96) >= titleSize("Solaris", 70));  // taller spine, bigger type
+  assert.equal(titleSize("", 80), 6.5);                 // no title, no crash
 });
 
 test("spineStature is stable per book, varied between books, and bounded", () => {

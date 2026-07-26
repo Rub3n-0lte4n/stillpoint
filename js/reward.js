@@ -96,7 +96,9 @@ function keyHash(s){
    uniform bars whose height encodes a quantity is the grammar of a bar chart,
    which is exactly what this must not look like. */
 export function spineThickness(total, opts){
-  const { min = 12, max = 34, wlo = 9000, whi = 150000 } = opts || {};
+  // The floor is set by legibility, not by data: below ~16px a spine cannot carry
+  // its own title, and an unlabelled book is the thing that reads as a bar.
+  const { min = 16, max = 36, wlo = 9000, whi = 150000 } = opts || {};
   const s = Math.sqrt(Math.max(1, total || 0));
   const lo = Math.sqrt(wlo), hi = Math.sqrt(whi);
   const t = Math.max(0, Math.min(1, (s - lo) / (hi - lo)));
@@ -107,6 +109,19 @@ export function spineThickness(total, opts){
 export function spineStature(key, opts){
   const { min = 66, max = 96 } = opts || {};
   return min + (keyHash("h:" + key) % (max - min + 1));
+}
+
+/* Type size for a title running up a spine. Short titles get comfortable type;
+   long ones shrink to a floor and then truncate, so a name is never simply
+   absent. `h` is the spine height; roughly 26px of it is padding, and a rotated
+   latin character advances about 0.58em. */
+export function titleSize(title, h, opts){
+  const { min = 6.5, max = 10, pad = 26, adv = 0.58 } = opts || {};
+  const len = String(title || "").trim().length;
+  if(!len) return min;
+  const avail = Math.max(0, (h || 0) - pad);
+  const fit = avail / (adv * len);
+  return Math.round(Math.max(min, Math.min(max, fit)) * 10) / 10;
 }
 
 // A few degrees of hue either side of the theme accent: individual, still tonal.
