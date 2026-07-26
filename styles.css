@@ -1191,15 +1191,21 @@
 /* On the finish card the spine is the celebration, so it carries real weight
    (8px bands) rather than the row's hairline. */
 .done-spine{max-width:280px;margin:16px auto 0;}
-.done-spine .spine{height:14px;gap:4px;border-radius:7px;}
-.done-spine .spine .sg{border-radius:3px;}
+/* Tight gaps so a long book still reads as one measure rather than a row of
+   dashes: at 14 chapters a 4px gap eats most of the band. */
+.done-spine .spine{height:14px;gap:2px;border-radius:7px;}
+.done-spine .spine .sg{border-radius:2px;}
 
 /* Finished shelf — books standing shoulder to shoulder on a plank.
    Thickness carries length (spineThickness); height barely varies and never by
    length. Uniform bars whose height encodes a quantity is a bar chart, and that
    is the one thing this must not read as. */
 .shelf{max-width:680px;margin:36px auto 0;}
-.shelf-row{display:flex;align-items:flex-end;justify-content:center;gap:2px;min-height:104px;
+.shelf-row{display:flex;align-items:flex-end;gap:2px;min-height:104px;
+  /* centred while the shelf fits; `safe` falls back to start once it overflows,
+     because a centred flex row puts its first item beyond scrollLeft 0 forever */
+  justify-content:center;
+  justify-content:safe center;
   padding:0 12px;overflow-x:auto;overflow-y:hidden;
   /* the plank: a lit top edge sitting on its own shadow */
   background:linear-gradient(180deg,transparent calc(100% - 3px),var(--hair-strong) calc(100% - 3px),
@@ -1245,11 +1251,20 @@
   box-shadow:inset 0 1px 0 color-mix(in srgb,var(--gold) 85%,transparent),
     inset 0 2px 0 color-mix(in srgb,var(--gold) 30%,transparent),0 4px 10px -5px rgba(0,0,0,.85);}
 .shelf-spine:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:3px;}
-/* A finger is not a cursor: on touch the thinnest books get enough width to hit.
-   Thickness still ranks by length, it just starts from a usable floor. */
-@media (pointer:coarse){
-  .shelf-row{gap:3px;}
-  .shelf-spine{min-width:24px;}
+/* A finger is not a cursor, and most reading happens on a phone. Rather than
+   shrink nine books into 390px, the books grow and the shelf scrolls: bigger
+   targets, readable spine titles, ranking by thickness preserved above a floor.
+   Narrow windows get the same treatment so the two never disagree. */
+@media (pointer:coarse), (max-width:680px){
+  .shelf-row{gap:3px;padding:0 14px;min-height:132px;
+    /* the fade is the only hint that there is more shelf to the right */
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 9px,#000 calc(100% - 9px),transparent 100%);
+    mask-image:linear-gradient(90deg,transparent 0,#000 9px,#000 calc(100% - 9px),transparent 100%);
+    scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;}
+  .shelf-spine{width:max(26px,calc(var(--sp-w,18px) * 1.4));
+    height:calc(var(--sp-h,80px) * 1.2);scroll-snap-align:center;}
+  .sp-title{font-size:9.5px;letter-spacing:.02em;inset:12px 0 13px;}
+  .shelf-spine::after{top:11px;bottom:13px;}
 }
 @media (prefers-reduced-motion:reduce){
   .shelf-spine{transition:none;}
@@ -1261,9 +1276,14 @@
   align-items:center;gap:8px;pointer-events:none;opacity:0;transform:translateY(6px);
   transition:opacity var(--t) var(--ease-out), transform var(--t) var(--ease-out);}
 .cbeat.on{opacity:1;transform:none;}
-.cbeat .cb-line{display:flex;align-items:center;gap:9px;font-size:var(--fs-sm);color:var(--ink-soft);}
+/* A long chapter title must never push the beat off a phone: the title drops to
+   its own centred line, and truncates if even that is not enough. */
+.cbeat .cb-line{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;
+  gap:4px 9px;max-width:min(92%,440px);margin:0 auto;text-align:center;
+  font-size:var(--fs-sm);color:var(--ink-soft);}
 .cbeat .cb-check{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;
   color:var(--amethyst);font-size:11px;background:color-mix(in srgb,var(--amethyst) 20%,transparent);
   border:1px solid color-mix(in srgb,var(--amethyst) 40%,transparent);}
-.cbeat .cb-next{color:var(--ink-mute);font-style:italic;}
+.cbeat .cb-next{color:var(--ink-mute);font-style:italic;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 @media (prefers-reduced-motion:reduce){ .cbeat{transition:opacity var(--t) linear;transform:none;} }

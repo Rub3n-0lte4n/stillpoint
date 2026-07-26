@@ -1248,6 +1248,10 @@ async function pruneStore(){
       if(keep.has(k)) continue;
       if(typeof k==="string" && k.startsWith("blockmode::") && keep.has(k.slice("blockmode::".length))) continue;
       if(typeof k==="string" && k.startsWith("hl::") && keep.has(k.slice("hl::".length))) continue;
+      // A finished book outlives the shelf's own library entry, so read:: records
+      // are retained unconditionally — they are a few hundred bytes each and they
+      // are the only record that the book was ever finished.
+      if(typeof k==="string" && k.startsWith("read::")) continue;
       await Store.del(k);
     }
   }catch(e){}
