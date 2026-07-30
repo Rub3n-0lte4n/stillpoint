@@ -318,7 +318,7 @@
         </span>
         <span class="pc-amt">$29<em>once, forever</em></span>
       </a>
-      <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you. · <button type="button" class="linklike" id="patronCodeLink">I have a patron code</button></p>
+      <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you.<span class="sep" aria-hidden="true"> · </span> <button type="button" class="linklike" id="patronCodeLink">I have a patron code</button></p>
     </section>
 
 
@@ -352,7 +352,8 @@
     </main>
 
     <footer class="site">
-      Your files never leave this device. The reading happens locally, in your browser. · <a href="#" id="aboutLink">How it works</a> · <a href="#" id="guideLink">Reader guide</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
+      <span class="footer-line">Your files never leave this device. The reading happens locally, in your browser.</span>
+      <span class="footer-links"><span class="sep" aria-hidden="true">·</span> <a href="#" id="aboutLink">How it works</a> <span class="sep" aria-hidden="true">·</span> <a href="#" id="guideLink">Reader guide</a> <span class="sep" aria-hidden="true">·</span> <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a></span>
     </footer>
   </div>
 </div>
@@ -485,6 +486,12 @@
             <span class="val" aria-live="polite"><span id="wpmVal">400</span> wpm</span>
           </div>
         </div>
+
+        <!-- Phone only: the slider itself moves into the sheet (placeDockCtrls),
+             so the dock keeps the live pace visible and tappable in one line. -->
+        <button type="button" class="wpm-chip" id="wpmChip" aria-label="Reading speed — open reading settings">
+          <b id="wpmChipVal">400</b><span>wpm</span>
+        </button>
 
         <button type="button" class="settings-toggle" id="settingsToggle" aria-expanded="false" aria-controls="moreControls">
           <svg class="st-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
