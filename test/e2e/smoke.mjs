@@ -124,7 +124,7 @@ async function openPage(cdp, injectSource) {
     await s("Page.navigate", { url });
     await loaded;
   };
-  return { goto, evalIn, waitFor, consoleErrors, exceptions };
+  return { goto, evalIn, waitFor, consoleErrors, exceptions, sessionId };
 }
 
 const PASSAGE = Array.from({ length: 20 }, (_, i) =>
@@ -218,6 +218,85 @@ async function main() {
     const b2 = await B.evalIn(`+((document.querySelector(".rw.on")||{}).dataset||{}).i || 0`);
     ok(b2 > b1, "the stream keeps advancing past the throwing save", `${b1} -> ${b2}`);
     ok(B.exceptions.length === 0, "no uncaught exceptions with storage full", B.exceptions.join(" | ").slice(0, 300));
+
+    /* ----- flow C: the phone reading field -----
+       A centred pivot spends only ~40% of a narrow screen on the side a word
+       actually grows into, so ordinary words used to run off the edge and get
+       eaten by the fade. These are the invariants that must hold instead: no
+       focal letter leaves the field, the pivot sits on --axis-x, and picking a
+       larger size never renders smaller type. */
+    console.log("\nflow C — phone field: no ink escapes, the pivot rides the axis");
+    const C = await openPage(cdp);
+    const setViewport = (w, h) => cdp.send("Emulation.setDeviceMetricsOverride",
+      { width: w, height: h, deviceScaleFactor: 2, mobile: true }, C.sessionId);
+    // ordinary English, not exotic: these are the words that broke it
+    const LONG = "The development of understanding between different people takes "
+      + "time and particularly careful information about responsibilities. ";
+    for (const [w, h] of [[320, 720], [390, 844], [430, 932], [844, 390]]) {
+      await setViewport(w, h);
+      await C.goto(BASE);
+      ok(await C.waitFor(`document.getElementById("dropzone") !== null`), `${w}x${h} landing renders`);
+      await C.evalIn(`document.fonts.ready.then(()=>true)`);
+      await C.evalIn(`document.getElementById("paste").value = ${JSON.stringify(LONG.repeat(4))}; document.getElementById("pasteGo").click();`);
+      await C.waitFor(`document.getElementById("reader").classList.contains("show")`);
+      await C.evalIn(`document.getElementById("playBtn").click();`);
+      await C.waitFor(`!!document.querySelector(".rw.on")`);
+      await C.evalIn(`document.getElementById("playBtn").click(); true`);
+      await C.waitFor(`document.getElementById("playBtn").getAttribute("aria-label")==="Play"`);
+
+      for (const mode of ["orp", "rsvp", "hybrid"]) {
+        const r = await C.evalIn(`(async()=>{
+          document.querySelector('#modeSeg button[data-mode="${mode}"]').click();
+          const out = { worstOverflow: -1e9, worstAxis: 0, sizes: {}, monotonic: true };
+          for(const s of [44,62,82,104]){
+            document.querySelector('#sizeSeg button[data-s="'+s+'"]').click();
+            await new Promise(r=>setTimeout(r,90));
+            let seen = 0;
+            for(let step=0; step<8; step++){
+              const stage=document.getElementById("stage");
+              const sr=stage.getBoundingClientRect();
+              const marked=[...document.querySelectorAll(".rw.on")];
+              if(!marked.length) break;
+              // ink extents of the marked chunk, from the letter spans only —
+              // the .rw padding is whitespace and may hang off the field
+              let lo=Infinity, hi=-Infinity;
+              for(const el of marked){
+                for(const sp of el.children){
+                  const b=sp.getBoundingClientRect();
+                  if(!b.width) continue;
+                  if(b.left<lo) lo=b.left;
+                  if(b.right>hi) hi=b.right;
+                }
+              }
+              if(hi>lo){
+                out.worstOverflow = Math.max(out.worstOverflow, sr.left-lo, hi-sr.right);
+                seen = parseFloat(getComputedStyle(document.getElementById("ribbon")).fontSize);
+              }
+              if("${mode}"==="orp"){
+                const p=document.querySelector(".rw.pivot .rpiv");
+                if(p){
+                  const b=p.getBoundingClientRect();
+                  const frac=parseFloat(getComputedStyle(stage).getPropertyValue("--axis-x"))/100;
+                  const axis=sr.left + sr.width*(isFinite(frac)?frac:0.5);
+                  out.worstAxis = Math.max(out.worstAxis, Math.abs((b.left+b.width/2)-axis));
+                }
+              }
+              document.getElementById("fwdBtn").click();
+              await new Promise(r=>setTimeout(r,60));
+            }
+            out.sizes[s]=seen;
+          }
+          const ladder=[44,62,82,104].map(s=>out.sizes[s]);
+          for(let i=1;i<ladder.length;i++) if(ladder[i] < ladder[i-1]-0.01) out.monotonic=false;
+          return out;})()`);
+        ok(r.worstOverflow <= 1.0, `${w}x${h} ${mode}: focal ink stays in the field`,
+          `worst overflow ${r.worstOverflow.toFixed(1)}px`);
+        if (mode === "orp")
+          ok(r.worstAxis < 0.6, `${w}x${h} orp: the pivot rides the axis`, `drift ${r.worstAxis.toFixed(2)}px`);
+        ok(r.monotonic, `${w}x${h} ${mode}: a larger size never renders smaller`, JSON.stringify(r.sizes));
+      }
+    }
+    ok(C.consoleErrors.length === 0, "no console errors in flow C", C.consoleErrors.join(" | ").slice(0, 300));
   } finally {
     cdp.close(); proc.kill();
     if (server) server.close();
@@ -227,6 +306,6 @@ async function main() {
   process.exit(fail ? 1 : 0);
 }
 
-const watchdog = setTimeout(() => { console.error("E2E watchdog: run exceeded 120s"); process.exit(1); }, 120000);
+const watchdog = setTimeout(() => { console.error("E2E watchdog: run exceeded 300s"); process.exit(1); }, 300000);
 watchdog.unref();
 main().catch((err) => { console.error(err); process.exit(1); });

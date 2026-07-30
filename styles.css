@@ -824,13 +824,14 @@
        still shrinks any single word that would overrun the screen. */
     .stage .ribbon{font-size:min(var(--read-size,62px),22vw);}
     .stage .ribbon .rw{padding:0 .3em;}
-    /* A narrow screen fits barely one neighbour per side, so the fade has to do
-       all of the work. The outer 5% is held fully clear: a neighbour reaching
-       the edge has no ink left to be chopped through, so the eye reads a
-       dissolve instead of a cut. */
+    /* The mask's only job is to stop a hard cut at the screen edge. It must never
+       touch the focal word, which on a phone can span nearly the whole field: the
+       old stops held full opacity only between 34% and 66%, a 132px band, so an
+       ordinary word had its own ends dissolved. Neighbour context is dimmed by
+       opacity (.14 playing, .34 paused), not by this mask. */
     .stage .ribbon-clip{
-      -webkit-mask-image:linear-gradient(90deg,transparent 0,transparent 5%,rgba(0,0,0,0.6) 22%,#000 34%,#000 66%,rgba(0,0,0,0.6) 78%,transparent 95%,transparent 100%);
-              mask-image:linear-gradient(90deg,transparent 0,transparent 5%,rgba(0,0,0,0.6) 22%,#000 34%,#000 66%,rgba(0,0,0,0.6) 78%,transparent 95%,transparent 100%);
+      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 4%,#000 96%,transparent 100%);
+              mask-image:linear-gradient(90deg,transparent 0,#000 4%,#000 96%,transparent 100%);
     }
 
     /* The reader's top bar owns the top of a phone screen, so a transient hint
@@ -1010,11 +1011,11 @@
     .tbtn{width:44px;height:44px;}
     .tbtn.play{width:52px;height:52px;}
     .controls.primary{flex:none;margin-top:0;flex-wrap:nowrap;}
-    /* a wide screen shows two neighbours a side, so the clear margin has to grow
-       with it — 5% of 852px is not enough room for a word to finish dissolving */
+    /* Sideways there is room for two neighbours a side, so the dissolve can be
+       wider than on a portrait phone without ever reaching the focal word. */
     .stage .ribbon-clip{
-      -webkit-mask-image:linear-gradient(90deg,transparent 0,transparent 10%,rgba(0,0,0,0.55) 26%,#000 38%,#000 62%,rgba(0,0,0,0.55) 74%,transparent 90%,transparent 100%);
-              mask-image:linear-gradient(90deg,transparent 0,transparent 10%,rgba(0,0,0,0.55) 26%,#000 38%,#000 62%,rgba(0,0,0,0.55) 74%,transparent 90%,transparent 100%);
+      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%);
+              mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%);
     }
   }
 

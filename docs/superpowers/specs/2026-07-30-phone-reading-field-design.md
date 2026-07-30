@@ -78,9 +78,23 @@ phone held sideways is 844px wide, takes the same full-bleed field through the
 height query, and has room to spare, so it keeps the axis at 50%. Only the width
 breakpoint sets the token.
 
-33% is a starting value, derived from the pivot sitting about 32% into the word.
-It gets tuned against screenshots during implementation and recorded here when
-settled.
+**Settled at 33%.** It was derived from the pivot sitting about 32% into the
+word, then confirmed by measurement. Sweeping the fraction on real prose at 390px
+and reading back the rendered type size gives a clear peak, falling off on both
+sides:
+
+| axis | S | M | L | XL |
+|---|---|---|---|---|
+| 28% | 44 | 46.8 | 47.0 | 47.0 |
+| 30% | 44 | 50.1 | 50.3 | 50.3 |
+| **33%** | **44** | **51.8** | **52.0** | **52.1** |
+| 36% | 44 | 49.4 | 49.7 | 49.7 |
+| 40% | 44 | 46.3 | 46.6 | 46.6 |
+| 50% | 38.3 | 38.6 | 38.8 | 38.8 |
+
+The last row is the old centred behaviour. Moving the axis to 33% buys about 35%
+more type on the same screen, which is the whole point: the width was always
+there, it was being spent on the empty side of the word.
 
 Everything currently hard-coding the stage centre reads the token instead:
 

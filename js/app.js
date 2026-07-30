@@ -144,34 +144,41 @@ function measureRibbon(){
   rb.style.transform="translate(0px, -50%)";             // a known frame for the maths
   ribbonOffset = 0;
   const els=[...rb.children];
-  const rbRect = rb.getBoundingClientRect();             // pass 1 (plain)
-  const left=[], w=[], preL=[], wPre=[], wPiv=[], wPost=[], inkL=[], inkR=[];
-  for(const el of els){
-    const r=el.getBoundingClientRect();
-    left.push(r.left-rbRect.left); w.push(r.width);
-    const pre=el.firstChild.getBoundingClientRect();
-    const piv=el.children[1].getBoundingClientRect();
-    const post=el.children[2].getBoundingClientRect();
-    preL.push(pre.left-rbRect.left); wPre.push(pre.width);
-    wPiv.push(piv.width); wPost.push(post.width);
-    // a zero-width prefix collapses onto the pivot, so derive the ink span from
-    // the three letter spans rather than trusting the padded element box
-    const l = (pre.width ? pre.left : piv.left) - rbRect.left;
-    inkL.push(l);
-    inkR.push(l + pre.width + piv.width + post.width);
-  }
-  rb.classList.add("mb");
-  const wPivB = els.map(el=>el.children[1].getBoundingClientRect().width);  // pass 2 (bold)
-  rb.classList.remove("mb");
 
   const sr = stage.getBoundingClientRect();
   const axisFrac = axisFraction(getComputedStyle(stage).getPropertyValue("--axis-x"));
   const field = Math.max(1, stage.clientWidth - 2*FIELD_INSET_PX);
-  const basePx = parseFloat(getComputedStyle(rb).fontSize) || 40;
 
-  G = { els, left, w, preL, wPre, wPiv, wPivB, wPost, inkL, inkR, marked:[],
-        l0: rbRect.left, axisFrac, field, basePx,
-        axisX: sr.left + sr.width*axisFrac, scale: 1 };
+  // Fill the cache from the ribbon AS IT IS RIGHT NOW. Two passes: plain, then
+  // with every pivot letter bold (the `mb` class). Bold width per word is
+  // position-independent, so the two are enough to place any marking state.
+  const readPasses = ()=>{
+    const rbRect = rb.getBoundingClientRect();           // pass 1 (plain)
+    const left=[], w=[], preL=[], wPre=[], wPiv=[], wPost=[], inkL=[], inkR=[];
+    for(const el of els){
+      const r=el.getBoundingClientRect();
+      left.push(r.left-rbRect.left); w.push(r.width);
+      const pre=el.firstChild.getBoundingClientRect();
+      const piv=el.children[1].getBoundingClientRect();
+      const post=el.children[2].getBoundingClientRect();
+      preL.push(pre.left-rbRect.left); wPre.push(pre.width);
+      wPiv.push(piv.width); wPost.push(post.width);
+      // a zero-width prefix collapses onto the pivot, so derive the ink span from
+      // the three letter spans rather than trusting the padded element box
+      const l = (pre.width ? pre.left : piv.left) - rbRect.left;
+      inkL.push(l);
+      inkR.push(l + pre.width + piv.width + post.width);
+    }
+    rb.classList.add("mb");
+    const wPivB = els.map(el=>el.children[1].getBoundingClientRect().width);  // pass 2 (bold)
+    rb.classList.remove("mb");
+    return { els, left, w, preL, wPre, wPiv, wPivB, wPost, inkL, inkR, marked:[],
+             l0: rbRect.left, axisFrac, field,
+             basePx: parseFloat(getComputedStyle(rb).fontSize) || 40,
+             axisX: sr.left + sr.width*axisFrac };
+  };
+
+  G = readPasses();
 
   // One scale for the window, set by its widest SINGLE word. A word cannot be
   // split, so it is the only thing allowed to force the type down; phrases yield
@@ -181,11 +188,21 @@ function measureRibbon(){
   // pivot letter (lopsided), chunk modes centre it as a block (symmetric). Using
   // the pivot halves for a centred mode charges it for an asymmetry it never has,
   // which cost chunk modes about a third of their type size.
-  const halvesAt = S.mode==="orp"
-    ? (i)=>halvesFor(G, i)
-    : (i)=>blockHalves(G, i, 1, S.mode==="hybrid");
-  G.scale = windowScale(els.map((_,i)=>halvesAt(i)), axisFrac, field, basePx);
-  rb.style.fontSize = G.scale < 1 ? (basePx*G.scale)+"px" : "";
+  const halvesAt = (m, i)=> S.mode==="orp"
+    ? halvesFor(m, i)
+    : blockHalves(m, i, 1, S.mode==="hybrid");
+  const scale = windowScale(els.map((_,i)=>halvesAt(G, i)), axisFrac, field, G.basePx);
+
+  // Glyph advances are NOT linear in font size (hinting and rounding), and
+  // letter-spacing is a fixed px that does not scale at all. Scaling the cached
+  // numbers by the ratio drifted the pivot several px off the axis, so shrink
+  // first and then measure the type that will actually be painted.
+  if(scale < 1){
+    rb.style.fontSize = (G.basePx*scale)+"px";
+    G = readPasses();
+  } else {
+    rb.style.fontSize = "";
+  }
 }
 // How many words this beat actually shows. The reader's chunk is a MAXIMUM: the
 // phrase yields words before the type yields size, so the chosen reading size
@@ -196,23 +213,21 @@ function chunkNow(){
   if(!G) return S.chunk;
   const i0 = S.index - ribbonStart;
   if(i0<0 || i0>=G.inkL.length) return S.chunk;
-  // the cache is measured at base size, so compare against a field grown by the
-  // window scale rather than scaling every cached width
-  const field = G.field / (G.scale || 1);
-  return chunkFit(G, i0, S.chunk, G.axisFrac, field, S.mode==="hybrid");
+  // the cache is measured at the size actually painted, so the field is the field
+  return chunkFit(G, i0, S.chunk, G.axisFrac, G.field, S.mode==="hybrid");
 }
 
 // Pure placement from the cache. ORP: the current word's bold pivot centre on
 // the axis. RSVP/Hybrid: the chunk as an optical block (Hybrid's bold pivots
 // widen it — the widths are known, so the edges are computed, not read).
-// Every cached number was measured at the base size, so one multiply by G.scale
-// converts it. No measuring, no forced reflow.
+// Every cached number was measured at the size the ribbon is actually painted
+// at, so placement is arithmetic and one transform write. No measuring here, no
+// forced reflow.
 function placeRibbon(){
   if(!G) return;
   const rb=$("ribbon");
   const i0 = S.index - ribbonStart;
   if(i0<0 || i0>=G.left.length) return;
-  const k = G.scale;
   let anchorRel;
   if(S.mode==="orp"){
     anchorRel = G.preL[i0] + G.wPre[i0] + G.wPivB[i0]/2;
@@ -223,7 +238,7 @@ function placeRibbon(){
     if(S.mode==="hybrid") for(let x=i0;x<=lastC;x++) grow += G.wPivB[x]-G.wPiv[x];
     anchorRel = (G.inkL[i0] + G.inkR[lastC] + grow)/2;
   }
-  const target = Math.round((G.axisX - G.l0 - anchorRel*k)*100)/100;
+  const target = Math.round((G.axisX - G.l0 - anchorRel)*100)/100;
   rb.style.transform = `translate(${target}px, -50%)`;
   ribbonOffset = target;
 }
