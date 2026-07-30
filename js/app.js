@@ -209,8 +209,8 @@ function placeRibbon(){
 }
 // Mark the current chunk. ORP anchors the focal word's pivot letter; Hybrid
 // gives EVERY word in the phrase its own amber anchor (landing points for the
-// eye's hops); RSVP stays unaccented. Classes go on before fitRibbon measures,
-// so the bold anchors are part of the measured width.
+// eye's hops); RSVP stays unaccented. The bold-pivot widths are cached, so the
+// anchors are part of the computed width without measuring.
 function markChunk(){
   if(!G) return;
   for(const el of G.marked) el.classList.remove("on","pivot");
@@ -226,60 +226,6 @@ function markChunk(){
   if(S.mode==="orp"){
     const pw=G.els[S.index-ribbonStart];
     if(pw && !pw.classList.contains("pivot")){ pw.classList.add("pivot"); if(!G.marked.includes(pw)) G.marked.push(pw); }
-  }
-}
-// Snap the ribbon into place — INSTANT (no slide), so the text is stationary
-// for its whole dwell and stays readable at speed. ORP puts the focal letter
-// exactly on the stage centre (the word hangs around it; the eye never moves).
-// RSVP and Hybrid show a phrase, so the phrase itself centres as a block —
-// its optical middle on the centre line, never lopsided by word lengths.
-function centerRibbon(){
-  const rb=$("ribbon"), stage=$("stage");
-  const sr = stage.getBoundingClientRect();
-  let anchor;
-  if(S.mode==="orp"){
-    const piv = rb.querySelector(`.rw[data-i="${S.index}"] .rpiv`);
-    if(!piv) return;
-    const pr = piv.getBoundingClientRect();
-    anchor = pr.left + pr.width/2;
-  } else {
-    const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
-    let left=Infinity, right=-Infinity;
-    for(let k=S.index;k<endChunk;k++){
-      const el=rb.querySelector(`.rw[data-i="${k}"]`);
-      if(!el) continue;
-      const r=el.getBoundingClientRect();
-      if(r.left<left) left=r.left;
-      if(r.right>right) right=r.right;
-    }
-    if(right<=left) return;
-    anchor = (left+right)/2;
-  }
-  const target = Math.round((ribbonOffset + (sr.left+sr.width/2) - anchor)*100)/100;
-  rb.style.transform = `translate(${target}px, -50%)`;
-  ribbonOffset = target;
-}
-// Shrink the focal word only when it would overflow the stage (e.g. long words on a
-// narrow phone) — short words keep the chosen size; long words scale down to stay readable
-// instead of running off the edges into the fade mask.
-function fitRibbon(){
-  const rb=$("ribbon"), stage=$("stage");
-  rb.style.fontSize="";   // back to the CSS-chosen base each step
-  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
-  let left=Infinity, right=-Infinity;
-  for(let k=S.index;k<endChunk;k++){
-    const el=rb.querySelector(`.rw[data-i="${k}"]`);
-    if(!el) continue;
-    const r=el.getBoundingClientRect();
-    if(r.left<left) left=r.left;
-    if(r.right>right) right=r.right;
-  }
-  if(right<=left) return;
-  const avail = stage.clientWidth * 0.9;       // leave a little breathing room from the edges
-  const wordW = right-left;
-  if(wordW > avail){
-    const base = parseFloat(getComputedStyle(rb).fontSize) || 40;
-    rb.style.fontSize = Math.max(16, base*(avail/wordW)) + "px";
   }
 }
 // Show the current position: focal word centred & still, neighbours dim alongside for context.
