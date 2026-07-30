@@ -28,6 +28,16 @@ export const Store = {
   get: (key)=> tx("readonly",  s=>s.get(key)),
   del: (key)=> tx("readwrite", s=>s.delete(key)),
   keys:()=> tx("readonly",  s=>s.getAllKeys()),
+  // All records whose key starts with `prefix`, with the prefix stripped from the
+  // returned key. Used to hydrate per-document ledgers (read::<docKey>).
+  getAllByPrefix: (prefix)=> db().then(d => new Promise((resolve, reject)=>{
+    const out = [];
+    const req = d.transaction(STORE, "readonly").objectStore(STORE).openCursor();
+    req.onsuccess = ()=>{ const c = req.result; if(!c){ resolve(out); return; }
+      const k = String(c.key); if(k.startsWith(prefix)) out.push({ key: k.slice(prefix.length), val: c.value });
+      c.continue(); };
+    req.onerror = ()=> reject(req.error);
+  })),
   // Per-document block-presentation preference. Same store, namespaced key — no
   // schema/VERSION bump. Tiny + book-scoped, so pruneStore() retains these keys.
   getBlockMode: (docKey)=> tx("readonly",  s=>s.get("blockmode::"+docKey)),

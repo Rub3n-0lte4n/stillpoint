@@ -252,9 +252,14 @@
       </div>
     </section>
 
+    <section class="shelf hidden" id="shelf" aria-label="Finished books">
+      <h4>Finished</h4>
+      <div class="shelf-row" id="shelfRow"></div>
+    </section>
+
     <div class="backup hidden" id="backup">
       <div class="backup-head">Move to another device</div>
-      <p class="backup-copy">Your whole library packs into one file, books included, along with your positions and settings. Share it straight to another device (AirDrop, Messages…) or export it, then tap Import there. No account, no server. Your data stays in your hands.</p>
+      <p class="backup-copy">Your whole library packs into one file, books included, along with your positions and settings. Share it straight to another device (AirDrop, Messages…) or export it, then tap Import there. There is nothing to sign into and nowhere for it to upload, so your library only moves when you move it.</p>
       <label class="backup-lock">
         <input type="checkbox" id="encToggle" />
         <span class="backup-lock-text">
@@ -292,7 +297,7 @@
 
     <section class="support-section">
       <div class="support-eyebrow">Support Stillpoint</div>
-      <p class="support-copy">A refined thing, made free. No ads, no accounts. Nothing you read leaves your device. If Stillpoint helped you read, you can leave a tip. The readers who love it are the only ones funding it.</p>
+      <p class="support-copy">A refined thing, made free. Nobody pays to reach you here, and you are never asked to make an account. Nothing you read leaves your device. If Stillpoint helped you read, you can leave a tip. The readers who love it are the only ones funding it.</p>
       <div class="tiers">
         <a class="tier" href="https://donate.stripe.com/dRmbJ112c1hJcBzfWy7N601" target="_blank" rel="noopener noreferrer">
           <span class="tier-ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h11v5.5A3.5 3.5 0 0 1 11.5 17h-4A3.5 3.5 0 0 1 4 13.5V8z"/><path d="M15 9.2h2a2.8 2.8 0 1 1 0 5.6h-2v-1.7h1.9a1.1 1.1 0 1 0 0-2.2H15V9.2z"/><path d="M3.6 19h11.8a.8.8 0 0 1 0 1.6H3.6a.8.8 0 0 1 0-1.6z"/></svg></span><span class="tier-label">Buy me a coffee</span><span class="tier-amt">$3</span>
@@ -313,7 +318,7 @@
         </span>
         <span class="pc-amt">$29<em>once, forever</em></span>
       </a>
-      <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you. · <button type="button" class="linklike" id="patronCodeLink">I have a patron code</button></p>
+      <p class="support-note"><span class="hh">♥</span> Built for free, supported by readers like you.<span class="sep" aria-hidden="true"> · </span> <button type="button" class="linklike" id="patronCodeLink">I have a patron code</button></p>
     </section>
 
 
@@ -347,7 +352,8 @@
     </main>
 
     <footer class="site">
-      Your files never leave this device. The reading happens locally, in your browser. · <a href="#" id="aboutLink">How it works</a> · <a href="#" id="guideLink">Reader guide</a> · <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a>
+      <span class="footer-line">Your files never leave this device. The reading happens locally, in your browser.</span>
+      <span class="footer-links"><span class="sep" aria-hidden="true">·</span> <a href="#" id="aboutLink">How it works</a> <span class="sep" aria-hidden="true">·</span> <a href="#" id="guideLink">Reader guide</a> <span class="sep" aria-hidden="true">·</span> <a class="footer-support" href="https://donate.stripe.com/3cI28r5isaSj9pnbGi7N600" target="_blank" rel="noopener noreferrer">Support this project ♥</a></span>
     </footer>
   </div>
 </div>
@@ -408,6 +414,7 @@
         <div class="ribbon-clip"><div class="ribbon hidden" id="ribbon" aria-hidden="true"></div></div>
         <div class="zone-flash" id="zoneFlash" aria-hidden="true"></div>
         <div class="speed-ghost" id="speedGhost" aria-hidden="true"><b id="sgVal">400</b><span>wpm</span></div>
+        <div id="chapterBeat" class="cbeat" aria-live="polite" aria-hidden="true"></div>
       </div>
 
       <!-- Block still card: full presentation over the stage -->
@@ -480,6 +487,12 @@
           </div>
         </div>
 
+        <!-- Phone only: the slider itself moves into the sheet (placeDockCtrls),
+             so the dock keeps the live pace visible and tappable in one line. -->
+        <button type="button" class="wpm-chip" id="wpmChip" aria-label="Reading speed, opens reading settings">
+          <b id="wpmChipVal">400</b><span>wpm</span>
+        </button>
+
         <button type="button" class="settings-toggle" id="settingsToggle" aria-expanded="false" aria-controls="moreControls">
           <svg class="st-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
           <span>Reading settings</span>
@@ -522,6 +535,7 @@
               <button type="button" data-aid="context" class="active" aria-pressed="true">Context</button>
               <button type="button" data-aid="smartPacing" class="active" aria-pressed="true" title="Slow down on long/complex sentences">Smart pace</button>
             <button type="button" data-aid="zen" class="active" aria-pressed="true" title="Fade the controls away while reading">Immersive</button>
+            <button type="button" data-aid="pauseChapters" aria-pressed="false" title="Pause for a beat at the end of each chapter">Chapter rest</button>
             </div>
           </div>
 
@@ -564,6 +578,7 @@
       <div><b id="stWpm">0</b><span>avg wpm</span></div>
     </div>
     <p class="done-streak" id="doneStreak"></p>
+    <div class="done-spine" id="doneSpine" aria-hidden="true"></div>
     <div class="done-actions">
       <button type="button" class="btn ghost" id="doneReview">Review highlights</button>
       <button type="button" class="btn ghost" id="doneShare">Share result</button>
@@ -599,7 +614,7 @@
       <div class="about-item"><span class="ai-k">In small phrases</span><span class="ai-v">A few words at once, for a faster, more natural rhythm. <em>RSVP</em></span></div>
       <div class="about-item"><span class="ai-k">A blend of both</span><span class="ai-v">Short phrases where every word keeps its own focal anchor. <em>Hybrid</em></span></div>
     </div>
-    <p class="about-note">Everything runs inside your browser. Your files are parsed on this device and never uploaded. No account, no cookies. The only thing counted is an anonymous visit, and what you read never leaves this device.</p>
+    <p class="about-note">Everything runs inside your browser. Your files are parsed on this device and never uploaded. Nothing about you is kept in a cookie, and you are never asked to register. The only thing counted is an anonymous visit.</p>
     <p class="about-note">Stillpoint launched on <a href="https://fazier.com/launches/stillpoint" target="_blank" rel="noopener noreferrer">Fazier</a> and is listed on <a href="https://saasgrow.app?ref=stillpointreader.com" target="_blank" rel="noopener noreferrer">SaaSGrow</a>.</p>
     <div class="about-actions">
       <button type="button" class="btn gold" id="aboutTry">Try a sample passage →</button>

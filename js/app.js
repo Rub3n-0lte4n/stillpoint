@@ -1,6 +1,7 @@
 // Stillpoint — app entry. Wires the reader UI, playback engine, and document loading.
 import { tokenize, orpIndex, esc, DEMO, HERO, sentenceFactors, sentenceStart, sentenceEnd, chapterItems, chapterGrid, chapterAt, rewindTarget } from "./text.js";
 import { Haptics } from "./haptics.js";
+import { Reward, creditRange, spineBands, titleSize, milestoneLine } from "./reward.js";
 import { parsePDF, parseEPUB } from "./parsers.js";
 import { Store } from "./store.js";
 import { modeForKind as resolveMode, defaultBlockMode, indexBlocks, blocksToHandle, isAutoDetected } from "./blockmode.js";
@@ -55,7 +56,7 @@ const $ = (id) => document.getElementById(id);
 const PRESETS = [[250,"Comfortable"],[400,"Focus"],[550,"Fast"],[700,"Skim"]];
 const RAMP_WORDS = 15;    // ease speed up over the first N words of a run
 const RAMP_MIN = 0.6;     // start each run at 60% of target WPM
-const settings = { countdown:true, context:true, smartPacing:true, zen:true, moreOpen:false };  // reading aids + dock state (persisted)
+const settings = { countdown:true, context:true, smartPacing:true, zen:true, moreOpen:false, pauseChapters:false };  // reading aids + dock state (persisted)
 
 /* keep the screen awake while streaming — phones otherwise dim and lock mid-chapter,
    because reading here never touches the screen */
@@ -316,6 +317,7 @@ function step(){
   S.timer = setTimeout(()=>{ if(S.playing) step(); }, delay);
 }
 function play(){
+  { const b = $("chapterBeat"); if(b){ b.classList.remove("on"); b.setAttribute("aria-hidden","true"); } }
   if(S.tokens.length===0) return;
   if(S.index>=S.tokens.length) S.index=0;
   // Back up by however long the reader was actually away: a glance costs a word
@@ -404,6 +406,7 @@ function maybeHint(where){
 // Reached the end — show the session summary.
 function finish(){
   pause();
+  Reward.finish(S.key, S.curCh, Date.now());
   // Belief 5: value has now been given — the header Support pill may appear from here on.
   try{ localStorage.setItem("fp_finished_v1","1"); }catch(e){}
   $("supportPill").classList.remove("hidden");
@@ -424,6 +427,7 @@ function finish(){
   // the review door only appears when something waits behind it
   const hl = S.highlights.length, rv = $("doneReview");
   if(rv){ rv.classList.toggle("hidden", hl===0); if(hl) rv.textContent = `Review ${hl} highlight${hl===1?"":"s"}`; }
+  $("doneSpine").innerHTML = spineHTML(Reward.forDoc(S.key), S.index, S.tokens.length);
   $("done").classList.add("show");
   $("doneLib").focus({preventScroll:true});   // move focus into the dialog
   nudgeQueued = true;   // nudge at the next clean moment (the library), never over this card
@@ -647,6 +651,14 @@ function renderToc(){
     b.onclick=()=>{ jumpTo(it.start); closeToc(); };
     list.appendChild(b);
   });
+  // Pasted text and single-section documents have nothing to list. Say so —
+  // an empty sheet opening as a sliver at the bottom of a phone reads as broken.
+  if(!list.childElementCount){
+    const p=document.createElement("p");
+    p.className="toc-empty";
+    p.textContent="This one runs straight through, with no chapters to jump between. Drag the progress bar to move around.";
+    list.appendChild(p);
+  }
 }
 function tocOpen(){ return !$("toc").hasAttribute("inert"); }
 function openToc(){
@@ -781,6 +793,25 @@ function exportHighlights(){
 
 /* ---------------- progress + scrubber ---------------- */
 function fmt(sec){ sec=Math.max(0,Math.round(sec)); const m=Math.floor(sec/60); const s=sec%60; return m+":"+String(s).padStart(2,"0"); }
+let beatTimer = null;
+// A chapter was just finished by reading. Take one designed breath at the seam.
+function onChapterEarned(k, grid){
+  const total = grid.length;
+  const entering = k + 1;                        // 1-based chapter now beginning
+  const title = (grid[k] && grid[k].title) || "";
+  Haptics.trigger("success");
+  if(document.hidden || $("done").classList.contains("show")) return;   // no visible beat if away or the finish card is up
+  const el = $("chapterBeat"); if(!el) return;
+  el.innerHTML = `<div class="cb-line"><span class="cb-check">✓</span>`
+    + `<span>${esc(milestoneLine(entering, total))}</span>`
+    + (title ? `<span class="cb-next">Entering “${esc(title)}”</span>` : ``)
+    + `</div>`;
+  el.setAttribute("aria-hidden", "false");
+  el.classList.add("on");
+  clearTimeout(beatTimer);
+  if(settings.pauseChapters){ pause(); }         // rest here until the reader resumes
+  else beatTimer = setTimeout(()=>{ el.classList.remove("on"); el.setAttribute("aria-hidden","true"); }, 1600);
+}
 let progressPaintAt=0;
 // `throttled` comes only from the streaming loop: the scrubber repaint is a
 // real layout per write, and a hairline moving 5x a second reads identically
@@ -805,7 +836,16 @@ function updateProgress(throttled){
   }
   // the top-right meta line names the chapter the bar describes (book-scope
   // documents keep the static parse meta: "EPUB · 12 chapters · 84,120 words")
-  if(k !== S.curCh){ S.curCh = k; $("docMeta").textContent = seg.title || S.meta; }
+  if(k !== S.curCh){
+    // Earned only by reading across a boundary (see creditRange in js/reward.js).
+    const due = creditRange(throttled, S.curCh, k);
+    if(due.length){
+      let earned = false;
+      for(const c of due){ if(Reward.credit(S.key, c).newlyEarned) earned = true; }
+      if(earned) onChapterEarned(k, grid);
+    }
+    S.curCh = k; $("docMeta").textContent = seg.title || S.meta;
+  }
   if(S.units.length>1){
     let u=0; for(let k=0;k<S.units.length;k++){ if(S.units[k].start<=S.index) u=k; }
     if(u!==S.curUnit && !$("toc").hasAttribute("inert")) renderToc();
@@ -990,20 +1030,44 @@ let openLibRow=null;   // at most one row rests open on its Remove action
 // The landing leads with whatever the visitor came for. A returning reader
 // came for their book, so a non-empty shelf (and the streak beside it) moves
 // above the hero; the pitch keeps its place for first-timers. Moving the nodes
-// preserves their listeners, same trick as placeModeCtrl.
+// preserves their listeners, same trick as placeDockCtrls.
 function placeShelf(hasBooks){
   const hero=document.querySelector("#landing .hero");
-  const recent=$("recent"), streak=$("streakStrip");
+  const recent=$("recent"), streak=$("streakStrip"), finished=$("shelf");
   if(!hero || !recent || !streak) return;
+  // what you're reading, how you're doing, what you've finished
+  const order = finished ? [recent, streak, finished] : [recent, streak];
   if(hasBooks){
-    if(recent.nextElementSibling!==streak || streak.nextElementSibling!==hero){
-      hero.parentNode.insertBefore(recent, hero);
-      hero.parentNode.insertBefore(streak, hero);
+    let placed = true;
+    for(let i=0;i<order.length;i++){
+      const next = i+1<order.length ? order[i+1] : hero;
+      if(order[i].nextElementSibling!==next){ placed=false; break; }
     }
+    if(!placed) for(const n of order) hero.parentNode.insertBefore(n, hero);
   } else {
     const paste=document.querySelector("#landing .paste-shell");
-    if(paste && paste.nextElementSibling!==recent){ paste.after(recent); recent.after(streak); }
+    if(paste && paste.nextElementSibling!==recent){
+      let prev = paste;
+      for(const n of order){ prev.after(n); prev = n; }
+    }
   }
+}
+// Segmented chapter spine for a library row / the finish card. Falls back to a
+// single continuous fill when a book has no real chapters (one whole-book segment)
+// or has not been opened under this feature yet (no reward record).
+function spineHTML(rec, index, total, cls){
+  const klass = "spine" + (cls ? " " + cls : "");
+  const bands = rec ? spineBands(rec, index) : null;
+  if(!bands || bands.length < 2){
+    const t = (rec && rec.total) || total || 0;
+    const pct = t ? Math.min(100, Math.round((index / t) * 100)) : 0;
+    return `<div class="${klass}" aria-hidden="true"><div class="sg is-cur"><i style="width:${pct}%"></i></div></div>`;
+  }
+  const segs = bands.map(b =>
+    b.state === "done" ? `<div class="sg is-done"></div>`
+    : b.state === "current" ? `<div class="sg is-cur"><i style="width:${Math.round(b.fill * 100)}%"></i></div>`
+    : `<div class="sg"></div>`).join("");
+  return `<div class="${klass}" aria-hidden="true">${segs}</div>`;
 }
 function renderLibrary(){
   const lib = loadLib();
@@ -1013,7 +1077,9 @@ function renderLibrary(){
   $("backup").classList.toggle("hidden", lib.length===0);
   openLibRow=null;
   list.innerHTML="";
-  if(lib.length===0){ box.classList.add("hidden"); return; }
+  // A finished book outlives the recent list (and its cap), so the shelf still
+  // paints when there is nothing left to continue.
+  if(lib.length===0){ box.classList.add("hidden"); renderShelf(); return; }
   box.classList.remove("hidden");
   lib.forEach(item=>{
     const pct = item.total ? Math.min(100, Math.round(item.index/item.total*100)) : 0;
@@ -1034,7 +1100,7 @@ function renderLibrary(){
           <span class="ri-prog">${prog}</span>
         </button>
         <button type="button" class="ri-x" title="Remove" aria-label="Remove &ldquo;${esc(item.title)}&rdquo;">✕</button>
-        <i class="ri-bar${finished?" full":""}" style="width:${finished?100:pct}%" aria-hidden="true"></i>
+        ${spineHTML(Reward.forDoc(item.key), item.index, item.total, "spine-row")}
       </div>`;
     const face=el.querySelector(".ri-face");
     // deletion choreography: the face slides off, the row folds shut, then the
@@ -1066,6 +1132,31 @@ function renderLibrary(){
     el.querySelector(".ri-x").onclick=(e)=>{ e.stopPropagation(); if(!sw.consumed()) commit(); };
     list.appendChild(el);
   });
+  renderShelf();
+}
+// The finished shelf: one length-scaled spine per finished book, most recent first.
+// Only finished books stand here — there are no empty slots and nothing to shame.
+function renderShelf(){
+  const sec = $("shelf"), row = $("shelfRow"); if(!sec || !row) return;
+  const items = Reward.shelf();
+  sec.classList.toggle("hidden", items.length === 0);
+  row.innerHTML = items.map((b, i) => {
+    const name = esc((b.title || "This book") + ", finished");
+    // Every book carries its name; the type shrinks to fit before it truncates.
+    const label = b.title ? `<span class="sp-title" aria-hidden="true">${esc(b.title)}</span>` : "";
+    return `<button type="button" class="shelf-spine${i === 0 ? " shelf-latest" : ""}" data-key="${esc(b.key)}"`
+      + ` style="--sp-w:${b.w}px;--sp-h:${b.h}px;--sp-tint:${b.tint}deg;--sp-fs:${titleSize(b.title, b.h)}px"`
+      + ` title="${name}" aria-label="${name}">${label}</button>`;
+  }).join("");
+  row.querySelectorAll(".shelf-spine").forEach(el => el.onclick = () => openByKey(el.dataset.key));
+}
+// Reopen a finished book from the shelf. Uses the live library record when the book
+// is still listed, otherwise a minimal item so openFromStore reports the memento
+// case ("isn't on this device anymore") instead of throwing.
+function openByKey(key){
+  const rec = Reward.forDoc(key);
+  const item = loadLib().find(x => x.key === key) || { key, title: (rec && rec.title) || "This book" };
+  openFromStore(item);
 }
 // Remove a library item, but defer deleting the cached file so "Undo" can restore it.
 function removeItem(item){
@@ -1089,6 +1180,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   S.chapters = chapterGrid(kind, S.nav, S.units, tokens.length);
   S.curCh = -1;   // first updateProgress sets the meta line
   S.title=title; S.meta=meta; S.key=key; S.index=0;
+  Reward.note(S.key, { bounds: S.chapters.map(c => c.start), total: S.tokens.length, title: S.title, kind });
   S.readMs=0; S.playStart=null; S.rampStart=0; $("done").classList.remove("show");
   S.pausedAt=null;   // the away-clock belongs to the previous document's stream
   updateGoalWhisper();   // no stale goal line survives a book switch
@@ -1164,6 +1256,10 @@ async function pruneStore(){
       if(keep.has(k)) continue;
       if(typeof k==="string" && k.startsWith("blockmode::") && keep.has(k.slice("blockmode::".length))) continue;
       if(typeof k==="string" && k.startsWith("hl::") && keep.has(k.slice("hl::".length))) continue;
+      // A finished book outlives the shelf's own library entry, so read:: records
+      // are retained unconditionally — they are a few hundred bytes each and they
+      // are the only record that the book was ever finished.
+      if(typeof k==="string" && k.startsWith("read::")) continue;
       await Store.del(k);
     }
   }catch(e){}
@@ -1354,7 +1450,7 @@ async function buildBackup(passphrase){
     try{ const bm = await Store.getBlockMode(item.key); if(bm) blockModes[item.key]=bm; }catch(e){}
     try{ const hl = await Store.getHighlights(item.key); if(hl) highlights[item.key]=hl; }catch(e){}
   }
-  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights, streak:Streak.raw()||undefined };
+  const backup = { format:BACKUP_FORMAT, version:1, exportedAt:new Date().toISOString(), prefs, library:lib, files, blockModes, highlights, streak:Streak.raw()||undefined, reward:Reward.exportAll() };
   // With a passphrase the whole bundle becomes the ciphertext of an envelope, so
   // a backup sitting in a cloud drive is a sealed file rather than your books.
   let text = JSON.stringify(backup);
@@ -1489,10 +1585,12 @@ async function restoreBackup(data){
         if(typeof data.prefs.context==="boolean")   settings.context   = data.prefs.context;
         if(typeof data.prefs.smartPacing==="boolean") settings.smartPacing = data.prefs.smartPacing;
         if(typeof data.prefs.zen==="boolean") settings.zen = data.prefs.zen;
+        if(typeof data.prefs.pauseChapters==="boolean") settings.pauseChapters = data.prefs.pauseChapters;
         applyAids();
       }catch(e){}
     }
     if(data.streak) Streak.importMerge(data.streak);
+    if(data.reward) Reward.importMerge(data.reward);
     hideParse(); renderLibrary(); renderStreak();
     toast(`Imported ${restored} book${restored===1?"":"s"} into your library.`);
   }catch(err){ hideParse(); toast("Couldn't import that backup: "+(err&&err.message?err.message:err), {error:true}); }
@@ -1514,6 +1612,7 @@ function setMode(m){
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
 function setWpm(v){
   S.wpm=v; $("wpmVal").textContent=v; $("wpm").value=v;
+  $("wpmChipVal").textContent=v;   // the phone dock's readout, when the slider is in the sheet
   $("wpmDown").disabled = v<=150; $("wpmUp").disabled = v>=800;
   let label="Custom", best=1e9;
   PRESETS.forEach(([w,n])=>{ const d=Math.abs(w-v); if(d<best && d<=40){best=d;label=n;} });
@@ -1533,9 +1632,13 @@ function applyAids(){
 }
 // Progressive disclosure: secondary controls collapse behind "Reading settings".
 // inert keeps the hidden controls out of the tab order while collapsed.
-// Under 680px the same panel presents as a modal bottom sheet (CSS), so it also
+// On a phone the same panel presents as a modal bottom sheet (CSS), so it also
 // gets a scrim, pause-on-open, and focus handling.
-const sheetMq = window.matchMedia("(max-width:680px)");
+// KEEP IN SYNC with the phone-reader media query in styles.css. Width alone
+// would miss a phone held sideways (852x393), which needs the sheet just as
+// much; pointer:coarse keeps a merely short desktop window on the inline panel.
+const PHONE_MQ = "(max-width:680px), (max-height:560px) and (max-width:1024px) and (pointer:coarse)";
+const sheetMq = window.matchMedia(PHONE_MQ);
 const isSheet = ()=> sheetMq.matches;
 function setSettingsOpen(open){
   const wrap=$("moreWrap"), tg=$("settingsToggle");
@@ -1550,16 +1653,20 @@ function setSettingsOpen(open){
       tg.focus({preventScroll:true});
   }
 }
-// Mode belongs in the sheet on phones but in the dock row on desktop. The panel
-// is one DOM node, so the control is relocated across the breakpoint — moving a
-// node preserves its listeners, and state never duplicates.
-function placeModeCtrl(){
-  const mode=$("modeCtrl"), wrap=$("moreWrap");
+// Mode and Speed belong in the sheet on phones but in the dock row on desktop.
+// The panel is one DOM node, so the controls are relocated across the breakpoint —
+// moving a node preserves its listeners, and state never duplicates. On a phone
+// the dock keeps only the wpm chip, which opens this sheet at the slider.
+function placeDockCtrls(){
+  const mode=$("modeCtrl"), speed=document.querySelector(".ctrl.slider-ctrl"), wrap=$("moreWrap");
   if(isSheet()){
-    $("moreControls").querySelector(".sheet-head").after(mode);
+    const head=$("moreControls").querySelector(".sheet-head");
+    head.after(mode); head.after(speed);   // lands as [head, speed, mode] — the chip's target first
     wrap.setAttribute("role","dialog"); wrap.setAttribute("aria-modal","true"); wrap.setAttribute("aria-label","Reading settings");
   }else{
-    document.querySelector(".controls.primary").insertBefore(mode, document.querySelector(".ctrl.slider-ctrl"));
+    const primary=document.querySelector(".controls.primary");
+    primary.insertBefore(speed, $("wpmChip"));
+    primary.insertBefore(mode, speed);
     wrap.removeAttribute("role"); wrap.removeAttribute("aria-modal"); wrap.removeAttribute("aria-label");
   }
 }
@@ -1567,7 +1674,7 @@ function placeModeCtrl(){
 // blur makes .dock and .reader-top the containing block for fixed children, so
 // a scrim meant to cover the viewport only ever covered its parent's box (the
 // stage above the settings sheet was never dimmed at all). Same reparenting
-// idiom as placeModeCtrl; desktop puts everything back home, because the toc
+// idiom as placeDockCtrls; desktop puts everything back home, because the toc
 // popover anchors to the top bar and the settings panel expands inline.
 let sheetHomes=null;
 function placeSheets(){
@@ -1591,7 +1698,7 @@ sheetMq.addEventListener("change",()=>{
   // modal — start closed instead
   if(isSheet() && $("moreWrap").classList.contains("open")) setSettingsOpen(false);
   $("sheetScrim").hidden = !(isSheet() && $("moreWrap").classList.contains("open"));
-  placeModeCtrl();
+  placeDockCtrls();
   placeSheets();
 });
 
@@ -1715,6 +1822,7 @@ async function shareResult(){
 
 /* ---------------- wiring ---------------- */
 function init(){
+  Reward.hydrate().then(()=>{ renderLibrary(); });
   const dz=$("dropzone"), fi=$("fileInput");
   dz.onclick=()=>fi.click();
   dz.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); fi.click(); }});
@@ -1891,6 +1999,8 @@ function init(){
 
   // "Reading settings" disclosure for the secondary controls
   $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
+  // the phone dock's pace readout opens the same sheet — the slider sits at its top
+  $("wpmChip").onclick=()=>{ setSettingsOpen(true); Haptics.trigger("light"); };
 
   // Phase 2: block still-card / page view / figures index wiring
   $("bcResume").onclick=resumeFromCard;
@@ -1908,7 +2018,7 @@ function init(){
   $("sheetScrim").onclick=()=>setSettingsOpen(false);
   wireSheet($("toc"), $("tocScrim"), closeToc);
   wireSheet($("moreWrap"), $("sheetScrim"), ()=>setSettingsOpen(false));
-  placeModeCtrl();
+  placeDockCtrls();
   placeSheets();
 
   // daily goal stepper on the streak strip
@@ -2026,6 +2136,7 @@ function init(){
     if(typeof prefs.context==="boolean") settings.context=prefs.context;
     if(typeof prefs.smartPacing==="boolean") settings.smartPacing=prefs.smartPacing;
     if(typeof prefs.zen==="boolean") settings.zen=prefs.zen;
+    if(typeof prefs.pauseChapters==="boolean") settings.pauseChapters=prefs.pauseChapters;
     if(typeof prefs.moreOpen==="boolean") settings.moreOpen=prefs.moreOpen;
     // patron themes survive restarts, but never boot a locked theme into the pitch modal
     if(prefs.theme) applyTheme((isPatron() || !isPatronTheme(prefs.theme)) ? prefs.theme : "midnight");
@@ -2052,7 +2163,7 @@ function init(){
 
   // Persist prefs on every "might be leaving" signal — beforeunload alone never
   // fires on iOS Safari / standalone PWA, which would silently drop settings there.
-  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,zen:settings.zen,moreOpen:settings.moreOpen,theme})); }catch(e){} };
+  const savePrefs=()=>{ try{ localStorage.setItem("fp_prefs",JSON.stringify({wpm:S.wpm,size:S.size,mode:S.mode,countdown:settings.countdown,context:settings.context,smartPacing:settings.smartPacing,zen:settings.zen,moreOpen:settings.moreOpen,pauseChapters:settings.pauseChapters,theme})); }catch(e){} };
   window.addEventListener("beforeunload",savePrefs);
   // a killed tab mid-play still credits the segment to the streak ledger
   // (and gets its exact position written past the streaming-save pacing)
