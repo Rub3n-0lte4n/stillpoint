@@ -656,7 +656,7 @@ function renderToc(){
   if(!list.childElementCount){
     const p=document.createElement("p");
     p.className="toc-empty";
-    p.textContent="No chapters in this one — it runs straight through. Drag the progress bar to move around.";
+    p.textContent="This one runs straight through, with no chapters to jump between. Drag the progress bar to move around.";
     list.appendChild(p);
   }
 }
