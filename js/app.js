@@ -1599,6 +1599,7 @@ async function restoreBackup(data){
 /* ---------------- controls ---------------- */
 function setMode(m){
   S.mode=m;
+  { const st=$("stage"); if(st) st.dataset.mode=m; }   // CSS switches --axis-x per mode
   document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
   // ORP reads one word by definition, so the chunk control leaves the panel
   // entirely — dimmed-but-selected was the most ambiguous state in the sheet
