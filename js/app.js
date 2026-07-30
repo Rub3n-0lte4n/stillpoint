@@ -10,6 +10,7 @@ import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js"
 import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
 import { stageGestures, sheetDrag, rowSwipe } from "./gestures.js";
 import { Hints } from "./hints.js";
+import { axisFraction, halvesFor, windowScale, FIELD_INSET_PX } from "./field.js";
 import { mergeLibrary, LIB_MAX } from "./library.js";
 import { encryptBackup, decryptBackup, isEncryptedBackup } from "./crypto.js";
 
@@ -115,7 +116,6 @@ let ribbonStart = 0, ribbonLast = -1, ribbonOffset = 0;
 // ribbon with arithmetic and a transform write — the old path forced a
 // synchronous reflow per word (fontSize reset + getBoundingClientRect).
 let G = null;
-let ribbonScaled = false;   // fontSize currently shrunk by the legacy fit path
 function invalidateRibbon(){ G = null; ribbonLast = -1; }
 
 function buildRibbon(){
@@ -134,55 +134,76 @@ function buildRibbon(){
 // (the `mb` class). Bold width per word is position-independent, so the two
 // passes are enough to place ANY marking state exactly, without ever measuring
 // again inside the hot loop.
+// Ink, not boxes. The `.rw` padding is whitespace and may hang off the field; a
+// letter may not. Measuring the padded box is what let ordinary words run off a
+// phone screen.
 function measureRibbon(){
   const rb=$("ribbon"), stage=$("stage");
   rb.style.fontSize="";                                  // measure at the base size
   rb.style.transform="translate(0px, -50%)";             // a known frame for the maths
-  ribbonOffset = 0; ribbonScaled = false;
+  ribbonOffset = 0;
   const els=[...rb.children];
   const rbRect = rb.getBoundingClientRect();             // pass 1 (plain)
-  const left=[], w=[], preL=[], wPre=[], wPiv=[];
+  const left=[], w=[], preL=[], wPre=[], wPiv=[], wPost=[], inkL=[], inkR=[];
   for(const el of els){
     const r=el.getBoundingClientRect();
     left.push(r.left-rbRect.left); w.push(r.width);
-    const pr=el.firstChild.getBoundingClientRect();
-    preL.push(pr.left-rbRect.left); wPre.push(pr.width);
-    wPiv.push(el.children[1].getBoundingClientRect().width);
+    const pre=el.firstChild.getBoundingClientRect();
+    const piv=el.children[1].getBoundingClientRect();
+    const post=el.children[2].getBoundingClientRect();
+    preL.push(pre.left-rbRect.left); wPre.push(pre.width);
+    wPiv.push(piv.width); wPost.push(post.width);
+    // a zero-width prefix collapses onto the pivot, so derive the ink span from
+    // the three letter spans rather than trusting the padded element box
+    const l = (pre.width ? pre.left : piv.left) - rbRect.left;
+    inkL.push(l);
+    inkR.push(l + pre.width + piv.width + post.width);
   }
   rb.classList.add("mb");
   const wPivB = els.map(el=>el.children[1].getBoundingClientRect().width);  // pass 2 (bold)
   rb.classList.remove("mb");
+
   const sr = stage.getBoundingClientRect();
-  G = { els, left, w, preL, wPre, wPiv, wPivB, marked:[],
-        l0: rbRect.left, stageC: sr.left + sr.width/2, avail: stage.clientWidth*0.9 };
+  const axisFrac = axisFraction(getComputedStyle(stage).getPropertyValue("--axis-x"));
+  const field = Math.max(1, stage.clientWidth - 2*FIELD_INSET_PX);
+  const basePx = parseFloat(getComputedStyle(rb).fontSize) || 40;
+
+  G = { els, left, w, preL, wPre, wPiv, wPivB, wPost, inkL, inkR, marked:[],
+        l0: rbRect.left, axisFrac, field, basePx,
+        axisX: sr.left + sr.width*axisFrac, scale: 1 };
+
+  // One scale for the window, set by its widest SINGLE word. A word cannot be
+  // split, so it is the only thing allowed to force the type down; phrases yield
+  // words instead (chunkNow).
+  G.scale = windowScale(els.map((_,i)=>halvesFor(G, i)), axisFrac, field, basePx);
+  rb.style.fontSize = G.scale < 1 ? (basePx*G.scale)+"px" : "";
 }
+// How many words this beat actually shows. Task 6 makes this fit-aware; until
+// then it is the stored preference.
+function chunkNow(){ return S.chunk; }
+
 // Pure placement from the cache. ORP: the current word's bold pivot centre on
-// the stage centre. RSVP/Hybrid: the chunk as an optical block (Hybrid's bold
-// pivots widen it — the widths are known, so the edges are computed, not read).
+// the axis. RSVP/Hybrid: the chunk as an optical block (Hybrid's bold pivots
+// widen it — the widths are known, so the edges are computed, not read).
+// Every cached number was measured at the base size, so one multiply by G.scale
+// converts it. No measuring, no forced reflow.
 function placeRibbon(){
   if(!G) return;
   const rb=$("ribbon");
   const i0 = S.index - ribbonStart;
   if(i0<0 || i0>=G.left.length) return;
-  let anchorRel, width;
+  const k = G.scale;
+  let anchorRel;
   if(S.mode==="orp"){
     anchorRel = G.preL[i0] + G.wPre[i0] + G.wPivB[i0]/2;
-    width = G.w[i0] + (G.wPivB[i0]-G.wPiv[i0]);
   } else {
-    const last = Math.min(S.index+S.chunk, S.tokens.length) - ribbonStart - 1;
+    const last = Math.min(S.index+chunkNow(), S.tokens.length) - ribbonStart - 1;
     const lastC = Math.min(last, G.left.length-1);
-    let shift = 0;
-    if(S.mode==="hybrid") for(let k=i0;k<lastC;k++) shift += G.wPivB[k]-G.wPiv[k];
-    const lastW = S.mode==="hybrid" ? G.w[lastC] + (G.wPivB[lastC]-G.wPiv[lastC]) : G.w[lastC];
-    const lo = G.left[i0], hi = G.left[lastC] + shift + lastW;
-    anchorRel = (lo+hi)/2;
-    width = hi-lo;
+    let grow = 0;
+    if(S.mode==="hybrid") for(let x=i0;x<=lastC;x++) grow += G.wPivB[x]-G.wPiv[x];
+    anchorRel = (G.inkL[i0] + G.inkR[lastC] + grow)/2;
   }
-  // rare overflow (a long word on a narrow phone): the legacy measured path
-  // still handles the shrink, exactly as before
-  if(width > G.avail){ fitRibbon(); centerRibbon(); ribbonScaled = !!rb.style.fontSize; return; }
-  if(ribbonScaled){ rb.style.fontSize=""; ribbonScaled=false; }
-  const target = Math.round((G.stageC - G.l0 - anchorRel)*100)/100;
+  const target = Math.round((G.axisX - G.l0 - anchorRel*k)*100)/100;
   rb.style.transform = `translate(${target}px, -50%)`;
   ribbonOffset = target;
 }
@@ -1608,7 +1629,8 @@ function setMode(m){
   else if(m==="hybrid"){ if(S.chunk<2) S.chunk=3; chunkCtrl.classList.remove("hidden"); setChunkUI(S.chunk);
     document.querySelector('#chunkSeg button[data-c="1"]').style.display="none"; }
   else { chunkCtrl.classList.remove("hidden"); document.querySelector('#chunkSeg button[data-c="1"]').style.display=""; setChunkUI(S.chunk); }
-  if(!$("ribbon").classList.contains("hidden")) render();   // re-centre if currently showing
+  invalidateRibbon();   // --axis-x moves with the mode, so the cached geometry is stale
+  if(!$("ribbon").classList.contains("hidden")) render();   // re-place if currently showing
 }
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
 function setWpm(v){

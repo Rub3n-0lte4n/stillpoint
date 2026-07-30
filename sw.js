@@ -4,7 +4,7 @@
    opened the app online, both it and your library work with no connection.
    CACHE_VERSION is derived from the shell files' content — after changing any
    of them run `npm run sw:bump` (CI's sw:check fails otherwise). */
-const CACHE_VERSION = "stillpoint-b0a9743eba";
+const CACHE_VERSION = "stillpoint-3e23439051";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
 // All paths are relative to this file (served from the site root).
@@ -27,6 +27,7 @@ const SHELL = [
   "js/gestures.js",
   "js/hints.js",
   "js/library.js",
+  "js/field.js",
   "js/vendor/pdf.min.js",
   "js/vendor/pdf.worker.min.js",
   "js/vendor/jszip.min.js",
