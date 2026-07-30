@@ -56,3 +56,36 @@ export function windowScale(halvesList, axisFrac, field, basePx){
   // where the edge dissolve softens it. The only case where ink leaves the field.
   return Math.max(scale, Math.min(1, floor));
 }
+
+/* ORP halves: measured from the BOLD pivot letter's centre, because bold is the
+   state the focal word is actually painted in. Bolding the pivot is the one thing
+   that changes a word's metrics, so the extra width lands on the right side. */
+export function halvesFor(m, i){
+  const grow = m.wPivB[i] - m.wPiv[i];
+  const pivC = m.preL[i] + m.wPre[i] + m.wPivB[i]/2;
+  return { left: pivC - m.inkL[i], right: (m.inkR[i] + grow) - pivC };
+}
+
+/* A phrase has no single pivot, so it centres on the axis as an optical block.
+   Hybrid ambers every word's pivot, so every word in the phrase widens. */
+export function blockHalves(m, i, count, hybrid){
+  const last = i + count - 1;
+  let grow = 0;
+  if(hybrid) for(let k=i;k<=last;k++) grow += m.wPivB[k] - m.wPiv[k];
+  const width = (m.inkR[last] + grow) - m.inkL[i];
+  return { left: width/2, right: width/2 };
+}
+
+/* The phrase yields before the type does: take as many words as fit at the
+   current size, down to one. One word that still does not fit is the only thing
+   that reaches windowScale. */
+export function chunkFit(m, start, maxChunk, axisFrac, field, hybrid){
+  const room = m.inkL.length - start;
+  const cap = Math.max(1, Math.min(maxChunk, room));
+  let best = 1;
+  for(let n=1;n<=cap;n++){
+    if(fitsAxis(blockHalves(m, start, n, hybrid), axisFrac, field)) best = n;
+    else break;
+  }
+  return best;
+}
