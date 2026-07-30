@@ -248,6 +248,50 @@ ORP/RSVP/Hybrid at 320, 360, 390, 430 and landscape:
 
 Screenshots at each breakpoint for the visual pass.
 
+## What shipped
+
+Four things were decided during implementation, three of them because building
+it taught us something the design could not have known.
+
+**Measure at the painted size, do not scale the measurements.** The design said
+to cache metrics at the base size and multiply by `G.scale` in placement. That
+drifted the pivot up to 7.8px off the axis, and let 2px of chunk-mode ink past
+the edge, because glyph advances are not linear in font size (hinting and
+rounding) and `letter-spacing` is a fixed px that does not scale at all.
+`measureRibbon` now shrinks first and re-reads, so every cached number describes
+the type actually on screen and placement needs no multiply. Costs two extra
+measurement passes per window rebuild, only when a shrink is needed. The hot path
+still never measures.
+
+**The window scale uses the halves of the mode it is in.** Using ORP's
+pivot-relative halves in a chunk mode charges a word for an asymmetry it never
+has, because chunk modes centre it as a block. That alone cost chunk modes about
+a third of their type size, so `measureRibbon` picks `halvesFor` or
+`blockHalves` by mode.
+
+**The landing's `hero-demo` stays centred.** The design flagged it as
+misrepresenting the reader. On inspection it is morphologically a boxed card, the
+same as the desktop stage, which also keeps a centred axis. The axis shift
+answers a narrow *full-bleed* field where a centred pivot wastes a third of the
+screen. Inside a 358px inset card showing short demo words nothing overflows
+(measured: zero), so shifting it would only make the landing lopsided.
+
+**The aids segment stays as it is.** Five chips with four filled amethyst is
+heavy, but the fill is the established active language and the 2026-07-18 pass
+already added the state dots that distinguish this multi-select from the radio
+segments beside it. Changing it now would be churn against a recorded decision.
+
+Two consequences worth naming, neither a defect:
+
+- **Above size M a phone is bounded by the screen, not by the setting.** On a
+  390px screen M, L and XL all resolve to about 56px for a window containing a
+  13-character word, because no strategy can render one larger without either
+  clipping it or strobing the type. S to M stays meaningful (44 to 56). The
+  alternative is per-word scaling, which is the strobing this pass removed.
+- **A chunk mode reduced to one word stays unaccented.** RSVP is unaccented by
+  design. Giving a lone word its amber anchor would make the accent flicker on
+  and off with word length, trading size strobing for colour strobing.
+
 ## Deliberately not doing
 
 - Wrapping a phrase onto two lines. It would rewrite the single-line geometry
