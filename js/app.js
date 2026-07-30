@@ -651,6 +651,14 @@ function renderToc(){
     b.onclick=()=>{ jumpTo(it.start); closeToc(); };
     list.appendChild(b);
   });
+  // Pasted text and single-section documents have nothing to list. Say so —
+  // an empty sheet opening as a sliver at the bottom of a phone reads as broken.
+  if(!list.childElementCount){
+    const p=document.createElement("p");
+    p.className="toc-empty";
+    p.textContent="This one runs straight through, with no chapters to jump between. Drag the progress bar to move around.";
+    list.appendChild(p);
+  }
 }
 function tocOpen(){ return !$("toc").hasAttribute("inert"); }
 function openToc(){
@@ -1022,7 +1030,7 @@ let openLibRow=null;   // at most one row rests open on its Remove action
 // The landing leads with whatever the visitor came for. A returning reader
 // came for their book, so a non-empty shelf (and the streak beside it) moves
 // above the hero; the pitch keeps its place for first-timers. Moving the nodes
-// preserves their listeners, same trick as placeModeCtrl.
+// preserves their listeners, same trick as placeDockCtrls.
 function placeShelf(hasBooks){
   const hero=document.querySelector("#landing .hero");
   const recent=$("recent"), streak=$("streakStrip"), finished=$("shelf");
@@ -1604,6 +1612,7 @@ function setMode(m){
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
 function setWpm(v){
   S.wpm=v; $("wpmVal").textContent=v; $("wpm").value=v;
+  $("wpmChipVal").textContent=v;   // the phone dock's readout, when the slider is in the sheet
   $("wpmDown").disabled = v<=150; $("wpmUp").disabled = v>=800;
   let label="Custom", best=1e9;
   PRESETS.forEach(([w,n])=>{ const d=Math.abs(w-v); if(d<best && d<=40){best=d;label=n;} });
@@ -1623,9 +1632,13 @@ function applyAids(){
 }
 // Progressive disclosure: secondary controls collapse behind "Reading settings".
 // inert keeps the hidden controls out of the tab order while collapsed.
-// Under 680px the same panel presents as a modal bottom sheet (CSS), so it also
+// On a phone the same panel presents as a modal bottom sheet (CSS), so it also
 // gets a scrim, pause-on-open, and focus handling.
-const sheetMq = window.matchMedia("(max-width:680px)");
+// KEEP IN SYNC with the phone-reader media query in styles.css. Width alone
+// would miss a phone held sideways (852x393), which needs the sheet just as
+// much; pointer:coarse keeps a merely short desktop window on the inline panel.
+const PHONE_MQ = "(max-width:680px), (max-height:560px) and (max-width:1024px) and (pointer:coarse)";
+const sheetMq = window.matchMedia(PHONE_MQ);
 const isSheet = ()=> sheetMq.matches;
 function setSettingsOpen(open){
   const wrap=$("moreWrap"), tg=$("settingsToggle");
@@ -1640,16 +1653,20 @@ function setSettingsOpen(open){
       tg.focus({preventScroll:true});
   }
 }
-// Mode belongs in the sheet on phones but in the dock row on desktop. The panel
-// is one DOM node, so the control is relocated across the breakpoint — moving a
-// node preserves its listeners, and state never duplicates.
-function placeModeCtrl(){
-  const mode=$("modeCtrl"), wrap=$("moreWrap");
+// Mode and Speed belong in the sheet on phones but in the dock row on desktop.
+// The panel is one DOM node, so the controls are relocated across the breakpoint —
+// moving a node preserves its listeners, and state never duplicates. On a phone
+// the dock keeps only the wpm chip, which opens this sheet at the slider.
+function placeDockCtrls(){
+  const mode=$("modeCtrl"), speed=document.querySelector(".ctrl.slider-ctrl"), wrap=$("moreWrap");
   if(isSheet()){
-    $("moreControls").querySelector(".sheet-head").after(mode);
+    const head=$("moreControls").querySelector(".sheet-head");
+    head.after(mode); head.after(speed);   // lands as [head, speed, mode] — the chip's target first
     wrap.setAttribute("role","dialog"); wrap.setAttribute("aria-modal","true"); wrap.setAttribute("aria-label","Reading settings");
   }else{
-    document.querySelector(".controls.primary").insertBefore(mode, document.querySelector(".ctrl.slider-ctrl"));
+    const primary=document.querySelector(".controls.primary");
+    primary.insertBefore(speed, $("wpmChip"));
+    primary.insertBefore(mode, speed);
     wrap.removeAttribute("role"); wrap.removeAttribute("aria-modal"); wrap.removeAttribute("aria-label");
   }
 }
@@ -1657,7 +1674,7 @@ function placeModeCtrl(){
 // blur makes .dock and .reader-top the containing block for fixed children, so
 // a scrim meant to cover the viewport only ever covered its parent's box (the
 // stage above the settings sheet was never dimmed at all). Same reparenting
-// idiom as placeModeCtrl; desktop puts everything back home, because the toc
+// idiom as placeDockCtrls; desktop puts everything back home, because the toc
 // popover anchors to the top bar and the settings panel expands inline.
 let sheetHomes=null;
 function placeSheets(){
@@ -1681,7 +1698,7 @@ sheetMq.addEventListener("change",()=>{
   // modal — start closed instead
   if(isSheet() && $("moreWrap").classList.contains("open")) setSettingsOpen(false);
   $("sheetScrim").hidden = !(isSheet() && $("moreWrap").classList.contains("open"));
-  placeModeCtrl();
+  placeDockCtrls();
   placeSheets();
 });
 
@@ -1982,6 +1999,8 @@ function init(){
 
   // "Reading settings" disclosure for the secondary controls
   $("settingsToggle").onclick=()=>{ setSettingsOpen(!$("moreWrap").classList.contains("open")); Haptics.trigger("light"); };
+  // the phone dock's pace readout opens the same sheet — the slider sits at its top
+  $("wpmChip").onclick=()=>{ setSettingsOpen(true); Haptics.trigger("light"); };
 
   // Phase 2: block still-card / page view / figures index wiring
   $("bcResume").onclick=resumeFromCard;
@@ -1999,7 +2018,7 @@ function init(){
   $("sheetScrim").onclick=()=>setSettingsOpen(false);
   wireSheet($("toc"), $("tocScrim"), closeToc);
   wireSheet($("moreWrap"), $("sheetScrim"), ()=>setSettingsOpen(false));
-  placeModeCtrl();
+  placeDockCtrls();
   placeSheets();
 
   // daily goal stepper on the streak strip

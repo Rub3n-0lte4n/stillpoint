@@ -460,8 +460,11 @@
     overflow:hidden;cursor:pointer;
   }
   /* faint warm halo resting at the focal point — the jewel detail behind the word */
+  /* --axis is where the still point lives. Everything that must sit on it reads
+     this one value, so the phone layout can raise the focal line off dead centre
+     without any of these pieces drifting apart. */
   .stage::before{
-    content:"";position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    content:"";position:absolute;left:50%;top:var(--axis,50%);transform:translate(-50%,-50%);
     width:min(56%,440px);height:128px;pointer-events:none;border-radius:50%;
     background:radial-gradient(closest-side, rgba(255,206,92,0.07), transparent 72%);
   }
@@ -474,7 +477,7 @@
             mask-image:linear-gradient(90deg,transparent 0,#000 20%,#000 80%,transparent 100%);
   }
   .stage .ribbon{
-    position:absolute;top:50%;left:0;white-space:nowrap;
+    position:absolute;top:var(--axis,50%);left:0;white-space:nowrap;
     transform:translate(0,-50%);will-change:transform;
     font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
     font-size:min(calc(var(--read-size,62px) * var(--stage-scale,1)),13vw);line-height:1;letter-spacing:.5px;
@@ -490,7 +493,7 @@
   .stage .guide{position:absolute;left:50%;transform:translateX(-50%);width:1.5px;opacity:.7;box-shadow:0 0 8px rgba(255,206,92,0.4);}
   .stage .guide.top{top:46px;height:24px;background:linear-gradient(var(--focus),rgba(255,206,92,0));}
   .stage .guide.bot{bottom:46px;height:24px;background:linear-gradient(rgba(255,206,92,0),var(--focus));}
-  .stage .baseline{position:absolute;left:10%;right:10%;top:50%;height:1px;opacity:.7;background:linear-gradient(90deg,transparent,var(--hair-strong) 50%,transparent);}
+  .stage .baseline{position:absolute;left:10%;right:10%;top:var(--axis,50%);height:1px;opacity:.7;background:linear-gradient(90deg,transparent,var(--hair-strong) 50%,transparent);}
 
   /* large displays: the stage spreads via the wrap; step the reading type up
      with it so the focal word doesn't shrink into a big screen. The S/M/L/XL
@@ -512,7 +515,7 @@
   @keyframes restBreathe{0%,100%{opacity:.72}50%{opacity:1}}
 
   /* edge-tap feedback: a chevron ghosts in where the tap landed, then dissolves */
-  .stage .zone-flash{position:absolute;top:50%;transform:translateY(-50%);font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:calc(44px * var(--stage-scale,1));line-height:1;color:var(--amethyst);opacity:0;pointer-events:none;}
+  .stage .zone-flash{position:absolute;top:var(--axis,50%);transform:translateY(-50%);font-family:var(--font-display);font-stretch:118%;font-weight:500;font-size:calc(44px * var(--stage-scale,1));line-height:1;color:var(--amethyst);opacity:0;pointer-events:none;}
   /* live wpm ghost while dragging speed on the stage */
   .stage .speed-ghost{
     position:absolute;left:50%;top:20%;transform:translateX(-50%) scale(.96);
@@ -636,6 +639,7 @@
   /* nested declared-ToC entries (parts → chapters → sections) indent like Books */
   .toc-item.d1{padding-left:28px;font-size:13.5px;}
   .toc-item.d2{padding-left:44px;font-size:13px;color:var(--ink-mute);}
+  .toc-empty{color:var(--ink-mute);font-size:13.5px;line-height:1.6;padding:10px 12px 14px;text-wrap:pretty;}
   .toc-figs{
     flex:none;margin-top:8px;font:inherit;font-size:13px;color:var(--ink-soft);text-align:left;
     background:none;border:none;border-top:1px solid var(--hair-soft);padding:14px 12px 6px;cursor:pointer;
@@ -661,6 +665,11 @@
   .settings-toggle .st-ic{width:15px;height:15px;}
   .settings-toggle .st-chev{width:13px;height:13px;opacity:.8;transition:transform var(--t) var(--ease-out);}
   .settings-toggle[aria-expanded="true"] .st-chev{transform:rotate(180deg);}
+
+  /* Phone-only speed readout. On a phone the slider moves into the sheet, so the
+     dock keeps a live number you can still tap to reach it — the pace stays
+     visible without spending a whole row on the control. */
+  .wpm-chip{display:none;}
 
   .more-wrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--t-slow) var(--ease-out);}
   .more-wrap.open{grid-template-rows:1fr;}
@@ -723,36 +732,121 @@
     .about-card{padding:32px 22px;}
     .dropzone{padding:34px 22px;}
     .or-row,.paste-shell,.recent{max-width:none;}
+    /* The tiers wrap 2+2 at this width, which drops the borderless "Choose your
+       own" link into a grid cell beside a card and reads as a broken box. The
+       three priced cards take one row instead, and the open amount becomes the
+       subordinate line under them, which is what it always was. */
+    .tiers{gap:8px;}
+    .tier{flex:1 1 0;min-width:0;padding:16px 6px;}
+    .tier .tier-label{font-size:12px;line-height:1.3;text-align:center;margin-top:6px;}
+    .tier .tier-amt{font-size:17px;}
+    .tier.custom{flex-basis:100%;padding:14px 10px;min-height:44px;}
+    /* the sentence wraps before the button here, leaving the interpunct dangling
+       at the end of the line — the break itself is the separator */
+    .support-note .sep{display:none;}
+    .support-note .linklike{display:inline-flex;align-items:center;min-height:44px;margin-top:2px;}
     /* ≥44px touch targets on phones, without the labels wrapping to two lines */
     .btn{padding:14px 16px;white-space:nowrap;}
     .support-pill{padding:11px 16px;}
-    footer.site a{display:inline-block;padding:7px 2px;}
+    /* the footer's three links sit inside a running sentence, where padding them
+       to 44px would make the line boxes collide. On a phone they break onto their
+       own row and the interpuncts drop out, so each one can take a real target. */
+    footer.site{padding:34px 0 28px;}
+    .footer-links{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:0 4px;margin-top:6px;}
+    .footer-links .sep:first-child{display:none;}
+    /* the rule has to ride the text, not the 44px box, or it detaches and floats
+       a line below the words */
+    footer.site a{
+      display:inline-flex;align-items:center;min-height:44px;padding:0 8px;border-bottom:none;
+      text-decoration:underline;text-decoration-color:var(--hair-strong);text-underline-offset:4px;
+    }
     .recent-item .ri-x{padding:11px;margin:-7px -4px;}
     .paste-actions{flex-wrap:wrap;}   /* both buttons stay on-screen at 320px */
+  }
 
-    /* reader */
-    .reader-top{padding:max(16px, calc(env(safe-area-inset-top) + 8px)) 0 2px;}
-    .doc-title .t{max-width:52vw;font-size:16px;}
-    .doc-title .meta{max-width:52vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-    .stage{padding:46px 14px;min-height:0;}
-    .stage .guide.top{top:40px;} .stage .guide.bot{bottom:40px;}
-    /* tighter words + a sooner edge-fade so neighbours stay subtle hints on a narrow screen */
-    .stage .ribbon{font-size:min(var(--read-size,62px),12vw);}
+  /* ================= the phone reader =================
+     Wider than the landing's breakpoint on purpose: a phone turned sideways is
+     852x393, so a width-only test would hand a landscape phone the desktop
+     reader on a 393px-tall screen — a boxed stage with the dock eating half the
+     glass. The second arm catches it, and `pointer:coarse` keeps a merely short
+     desktop window out of it.
+     KEEP IN SYNC with PHONE_MQ in js/app.js, which decides the same thing for
+     the settings panel's sheet behaviour. */
+  @media (max-width:680px), (max-height:560px) and (max-width:1024px) and (pointer:coarse){
+    /* ---------- reader: on a phone the screen IS the stage ----------
+       On a wide display the stage is a card resting in a page, and the border
+       is what makes it a jewel. Shrink that card onto a phone and the border
+       becomes a picture frame around 40% of the glass, with a wall of controls
+       under it — the opposite of one still word. So the phone drops the frame:
+       the stage goes full-bleed behind everything, the chrome floats over it on
+       gradient scrims, and the focal line is pinned to the viewport instead of
+       being wherever the leftover box happens to centre. */
+    .reader > .wrap{max-width:none;}
+    /* Out of flow and pinned to the viewport, so the reading field is the whole
+       screen and the word never shifts when the dock changes height. The wrap
+       keeps flex:1 (inline), so the dock still sits at the bottom. */
+    .stage-shell{position:fixed;inset:0;z-index:0;padding:0;}
+    .stage{
+      width:100%;max-width:none;height:100%;border:none;border-radius:0;box-shadow:none;
+      /* the bottom padding raises the flex-centred content (resting word,
+         countdown) to the same line the absolute pieces read from --axis */
+      padding:0 0 12vh;
+      --axis:44%;
+      --guide-gap:calc(var(--read-size,62px) * 0.62 + 16px);
+      background:
+        radial-gradient(120% 60% at 50% 0%, var(--stage-sheen), transparent 60%),
+        radial-gradient(150% 46% at 50% var(--axis), var(--stage-core), var(--stage-edge));
+    }
+    /* guides frame the word instead of the box: both re-anchor to the focal line
+       and scale with the reading size */
+    .stage .guide.top{top:calc(var(--axis) - var(--guide-gap) - 24px);bottom:auto;}
+    .stage .guide.bot{top:calc(var(--axis) + var(--guide-gap));bottom:auto;}
+    /* inside the card this rule read as the line the word rides on; edge-to-edge
+       it would cut the phone in half, so it pulls in to a short centred mark */
+    .stage .baseline{left:24%;right:24%;opacity:.4;}
+    /* The old 12vw ceiling was set for the inset stage and clamped M, L and XL to
+       the same ~47px on a 393px screen — three of the four sizes did nothing. The
+       full-bleed field is wide enough to give the scale back its range; placeRibbon
+       still shrinks any single word that would overrun the screen. */
+    .stage .ribbon{font-size:min(var(--read-size,62px),22vw);}
     .stage .ribbon .rw{padding:0 .3em;}
-    /* a narrow stage fits barely one neighbour per side, so the fade has to do
-       more of the work: words dissolve well before the edge instead of sitting
-       chopped mid-word at full brightness */
+    /* A narrow screen fits barely one neighbour per side, so the fade has to do
+       all of the work. The outer 5% is held fully clear: a neighbour reaching
+       the edge has no ink left to be chopped through, so the eye reads a
+       dissolve instead of a cut. */
     .stage .ribbon-clip{
-      -webkit-mask-image:linear-gradient(90deg,transparent 4%,#000 30%,#000 70%,transparent 96%);
-              mask-image:linear-gradient(90deg,transparent 4%,#000 30%,#000 70%,transparent 96%);
+      -webkit-mask-image:linear-gradient(90deg,transparent 0,transparent 5%,rgba(0,0,0,0.6) 22%,#000 34%,#000 66%,rgba(0,0,0,0.6) 78%,transparent 95%,transparent 100%);
+              mask-image:linear-gradient(90deg,transparent 0,transparent 5%,rgba(0,0,0,0.6) 22%,#000 34%,#000 66%,rgba(0,0,0,0.6) 78%,transparent 95%,transparent 100%);
     }
 
-    .transport{gap:18px;margin-bottom:14px;}
-    /* slim dock: everything tall now lives in the settings sheet, so the old
-       internal-scroll cap is gone */
-    .dock{padding:12px 0 calc(14px + env(safe-area-inset-bottom));}
-    .scrub{gap:10px;margin-bottom:12px;}
-    .scrub .time{width:50px;font-size:11px;}
+    /* The reader's top bar owns the top of a phone screen, so a transient hint
+       drops below it instead of landing across the book's title. */
+    body:has(.reader.show) .toasts{top:calc(env(safe-area-inset-top) + 84px);}
+
+    /* chrome floats over the field on scrims — a hard bar with a blurred edge
+       would cut the screen back into boxes */
+    .reader-top{
+      position:relative;z-index:20;
+      padding:max(16px, calc(env(safe-area-inset-top) + 8px)) 0 22px;
+      background:linear-gradient(180deg, rgba(6,4,13,0.9) 0%, rgba(6,4,13,0.55) 52%, transparent 100%);
+    }
+    .doc-title .t{max-width:52vw;font-size:16px;}
+    .doc-title .meta{max-width:52vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    /* brand slims to the orb so the top bar holds title + contents at 320px */
+    .reader-top .brand h1{display:none;}
+
+    .dock{
+      position:relative;z-index:20;border-top:none;
+      -webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none;
+      background:linear-gradient(0deg, rgba(6,4,13,0.94) 0%, rgba(6,4,13,0.86) 48%, rgba(6,4,13,0.5) 78%, transparent 100%);
+      padding:26px 0 calc(10px + env(safe-area-inset-bottom));
+    }
+    .transport{gap:16px;margin-bottom:0;}
+    .tbtn{width:46px;height:46px;}
+    .tbtn.play{width:60px;height:60px;}
+    .tbtn.play svg{width:24px;height:24px;}
+    .scrub{gap:10px;margin-bottom:14px;}
+    .scrub .time{width:46px;font-size:11px;}
 
     .controls{gap:16px 16px;}
     .seg button{padding:13px 16px;}              /* ~44px touch targets */
@@ -760,15 +854,23 @@
     .ctrl{max-width:100%;}
     .seg{flex-wrap:wrap;max-width:100%;border-radius:22px;}
     .bmg-row{flex-wrap:wrap;}
-    .ctrl.slider-ctrl{order:-1;flex-basis:100%;align-items:center;}
     .ctrl.slider-ctrl .slider-row{width:100%;justify-content:center;}
     input[type=range]{flex:1;width:auto;min-width:80px;max-width:280px;}
     .wpm-step{width:40px;height:40px;}   /* touch-sized steppers */
-    .settings-toggle{justify-content:center;padding:12px 18px;}
     .kbd-hint{display:none;}                       /* no hardware keyboard on touch */
 
-    /* brand slims to the orb so the top bar holds title + contents at 320px */
-    .reader-top .brand h1{display:none;}
+    /* the dock's last line: live pace + the way into everything else, one row.
+       placeDockCtrls() moves the speed slider itself into the sheet. */
+    .controls.primary{gap:10px;margin-top:14px;}
+    .wpm-chip{
+      display:inline-flex;align-items:baseline;gap:5px;font-family:inherit;cursor:pointer;
+      background:none;border:none;padding:14px;min-height:44px;color:var(--gold);
+    }
+    .wpm-chip b{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;}
+    .wpm-chip span{font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--ink-mute);}
+    .wpm-chip:active{transform:scale(.96);}
+    .settings-toggle{justify-content:center;padding:13px 16px;min-height:44px;}
+    .fi-x,.rv-x,.about-x{min-width:44px;min-height:44px;}
 
     /* ---- reading settings as a bottom sheet ---- */
     /* the opacity transition lets a released drag hand the scrim back smoothly */
@@ -809,7 +911,7 @@
     .toc{
       position:fixed;left:0;right:0;bottom:0;top:auto;z-index:74;width:auto;
       border-radius:22px 22px 0 0;border-left:none;border-right:none;border-bottom:none;
-      max-height:76dvh;opacity:1;transform:translateY(103%);
+      max-height:76dvh;min-height:34dvh;opacity:1;transform:translateY(103%);
       padding:12px 20px calc(20px + env(safe-area-inset-bottom));
       padding-left:max(20px, env(safe-area-inset-left));
       padding-right:max(20px, env(safe-area-inset-right));
@@ -827,14 +929,15 @@
   }
   /* the five-button transport needs a tighter fit at 320–360px (targets stay ≥44px) */
   @media (max-width:360px){
-    .transport{gap:12px;}
+    .transport{gap:10px;}
     .tbtn{width:44px;height:44px;}
-    .tbtn.play{width:62px;height:62px;}
+    .tbtn.play{width:56px;height:56px;}
   }
 
-  /* medium-short viewports (e.g. phones with browser toolbars shown): trim the
-     stage so it stays readable as it shrinks with the dock expanded */
-  @media (max-height:700px){
+  /* medium-short viewports (e.g. a short desktop window): trim the boxed stage so
+     it stays readable as it shrinks with the dock expanded. Phones run the
+     full-bleed stage instead, which has no box to trim. */
+  @media (max-height:700px) and (min-width:681px){
     .stage{padding:30px 18px;}
     .stage-shell{padding:10px 0;}
   }
@@ -844,16 +947,9 @@
      phones whose usable height is reduced by browser toolbars (e.g. iPhone SE). Compresses
      the reader so the stage + the expanded dock fit without overlapping or scrolling. */
   @media (max-height:600px){
-    .reader-top{padding:calc(env(safe-area-inset-top) + 8px) 0 2px;}
-    .stage-shell{padding:6px 0;}
-    .stage{min-height:0;padding:24px 22px;}
-    .stage .guide.top{top:16px;} .stage .guide.bot{bottom:16px;}
-    .stage .ribbon{font-size:min(var(--read-size,62px),12vw,30vh);}
+    .stage .ribbon{font-size:min(var(--read-size,62px),22vw,34vh);}
     .stage .resting{font-size:21px;}
 
-    /* if the expanded dock is taller than the screen (tiny landscape phones), cap it and
-       let it scroll internally instead of overlapping the stage */
-    .dock{padding:10px 0 calc(8px + env(safe-area-inset-bottom));max-height:68vh;overflow-y:auto;}
     .scrub{margin-bottom:9px;}
     .transport{gap:16px;margin-bottom:9px;}
     .tbtn{width:42px;height:42px;}
@@ -869,6 +965,43 @@
     .done-orb{width:54px;height:54px;margin-bottom:12px;}
     .done-stats{margin:16px 0;}
     .about-card{padding:26px 22px;}
+  }
+  /* the boxed stage only — the phone's full-bleed field is re-asserted below */
+  @media (max-height:600px) and (min-width:681px){
+    .reader-top{padding:calc(env(safe-area-inset-top) + 8px) 0 2px;}
+    .stage-shell{padding:6px 0;}
+    .stage{min-height:0;padding:24px 22px;}
+    .stage .guide.top{top:16px;} .stage .guide.bot{bottom:16px;}
+    /* if the expanded dock is taller than the screen, cap it and let it scroll
+       internally instead of overlapping the stage */
+    .dock{padding:10px 0 calc(8px + env(safe-area-inset-bottom));max-height:68vh;overflow-y:auto;}
+  }
+  /* Phone held sideways. It matches the boxed block above on width, so the field
+     layout has to be restated here; shortness then only means pulling the chrome
+     and the guides in toward the focal line. */
+  @media (max-height:560px) and (max-width:1024px) and (pointer:coarse){
+    .reader-top{position:relative;padding:max(10px, calc(env(safe-area-inset-top) + 6px)) 0 14px;}
+    .stage-shell{position:fixed;inset:0;padding:0;}
+    .stage{min-height:0;padding:0 0 8vh;--axis:46%;--guide-gap:calc(var(--read-size,62px) * 0.5 + 12px);}
+    .stage .guide.top{top:calc(var(--axis) - var(--guide-gap) - 24px);bottom:auto;}
+    .stage .guide.bot{top:calc(var(--axis) + var(--guide-gap));bottom:auto;}
+    .dock{padding:14px 0 calc(6px + env(safe-area-inset-bottom));max-height:none;overflow:visible;}
+    /* Sideways there is width to spare and no height at all, so the dock's three
+       stacked rows lay out as one: scrubber, transport, pace. The sheets are on
+       <body> at this size (placeSheets), so the row holds only these three. */
+    .dock > .wrap{display:flex;align-items:center;gap:20px;}
+    .goal-whisper{display:none;}
+    .scrub{flex:1;min-width:120px;margin-bottom:0;}
+    .transport{flex:none;margin-bottom:0;gap:14px;}
+    .tbtn{width:44px;height:44px;}
+    .tbtn.play{width:52px;height:52px;}
+    .controls.primary{flex:none;margin-top:0;flex-wrap:nowrap;}
+    /* a wide screen shows two neighbours a side, so the clear margin has to grow
+       with it — 5% of 852px is not enough room for a word to finish dissolving */
+    .stage .ribbon-clip{
+      -webkit-mask-image:linear-gradient(90deg,transparent 0,transparent 10%,rgba(0,0,0,0.55) 26%,#000 38%,#000 62%,rgba(0,0,0,0.55) 74%,transparent 90%,transparent 100%);
+              mask-image:linear-gradient(90deg,transparent 0,transparent 10%,rgba(0,0,0,0.55) 26%,#000 38%,#000 62%,rgba(0,0,0,0.55) 74%,transparent 90%,transparent 100%);
+    }
   }
 
   /* ---------- accessibility ---------- */
@@ -1275,6 +1408,18 @@
    shrink nine books into 390px, the books grow and the shelf scrolls: bigger
    targets, readable spine titles, ranking by thickness preserved above a floor.
    Narrow windows get the same treatment so the two never disagree. */
+/* Tablets and touch laptops keep the desktop reader — a boxed stage is right when
+   there is this much glass — but they are still fingers, not a mouse. The controls
+   were sized for a cursor and left a 32px row of segments on an iPad. */
+@media (pointer:coarse){
+  .seg button{padding:14px 16px;min-width:44px;}   /* min-width catches the single-digit Chunk row */
+  .wpm-step{width:44px;height:44px;}
+  .settings-toggle{min-height:44px;}
+  .toc-item{padding:13px 12px;}
+  .fi-x,.rv-x,.about-x,.sheet-done{min-width:44px;min-height:44px;}
+  .linklike,.guide-open{display:inline-flex;align-items:center;min-height:44px;}
+}
+
 @media (pointer:coarse), (max-width:680px){
   .shelf-row{gap:3px;padding:0 14px;min-height:132px;
     /* the fade is the only hint that there is more shelf to the right */
