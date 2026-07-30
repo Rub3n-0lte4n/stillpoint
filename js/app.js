@@ -10,7 +10,7 @@ import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js"
 import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
 import { stageGestures, sheetDrag, rowSwipe } from "./gestures.js";
 import { Hints } from "./hints.js";
-import { axisFraction, halvesFor, windowScale, FIELD_INSET_PX } from "./field.js";
+import { axisFraction, halvesFor, blockHalves, windowScale, chunkFit, FIELD_INSET_PX } from "./field.js";
 import { mergeLibrary, LIB_MAX } from "./library.js";
 import { encryptBackup, decryptBackup, isEncryptedBackup } from "./crypto.js";
 
@@ -25,7 +25,8 @@ const S = {
   index: 0,
   playing: false,
   mode: "orp",
-  chunk: 1,
+  chunk: 1,      // the reader's MAXIMUM words per beat (stored in fp_prefs)
+  chunkNow: 1,   // how many of them actually fit this beat; resolved in render()
   wpm: 400,
   size: 62,
   title: "Untitled",
@@ -175,12 +176,31 @@ function measureRibbon(){
   // One scale for the window, set by its widest SINGLE word. A word cannot be
   // split, so it is the only thing allowed to force the type down; phrases yield
   // words instead (chunkNow).
-  G.scale = windowScale(els.map((_,i)=>halvesFor(G, i)), axisFrac, field, basePx);
+  //
+  // Measured the way that word will actually be PLACED: ORP hangs it off its
+  // pivot letter (lopsided), chunk modes centre it as a block (symmetric). Using
+  // the pivot halves for a centred mode charges it for an asymmetry it never has,
+  // which cost chunk modes about a third of their type size.
+  const halvesAt = S.mode==="orp"
+    ? (i)=>halvesFor(G, i)
+    : (i)=>blockHalves(G, i, 1, S.mode==="hybrid");
+  G.scale = windowScale(els.map((_,i)=>halvesAt(i)), axisFrac, field, basePx);
   rb.style.fontSize = G.scale < 1 ? (basePx*G.scale)+"px" : "";
 }
-// How many words this beat actually shows. Task 6 makes this fit-aware; until
-// then it is the stored preference.
-function chunkNow(){ return S.chunk; }
+// How many words this beat actually shows. The reader's chunk is a MAXIMUM: the
+// phrase yields words before the type yields size, so the chosen reading size
+// stays the invariant and the beat length adapts to the screen. ORP is one word
+// by definition and never asks.
+function chunkNow(){
+  if(S.mode==="orp") return 1;
+  if(!G) return S.chunk;
+  const i0 = S.index - ribbonStart;
+  if(i0<0 || i0>=G.inkL.length) return S.chunk;
+  // the cache is measured at base size, so compare against a field grown by the
+  // window scale rather than scaling every cached width
+  const field = G.field / (G.scale || 1);
+  return chunkFit(G, i0, S.chunk, G.axisFrac, field, S.mode==="hybrid");
+}
 
 // Pure placement from the cache. ORP: the current word's bold pivot centre on
 // the axis. RSVP/Hybrid: the chunk as an optical block (Hybrid's bold pivots
@@ -197,7 +217,7 @@ function placeRibbon(){
   if(S.mode==="orp"){
     anchorRel = G.preL[i0] + G.wPre[i0] + G.wPivB[i0]/2;
   } else {
-    const last = Math.min(S.index+chunkNow(), S.tokens.length) - ribbonStart - 1;
+    const last = Math.min(S.index+(S.chunkNow||S.chunk), S.tokens.length) - ribbonStart - 1;
     const lastC = Math.min(last, G.left.length-1);
     let grow = 0;
     if(S.mode==="hybrid") for(let x=i0;x<=lastC;x++) grow += G.wPivB[x]-G.wPiv[x];
@@ -215,7 +235,7 @@ function markChunk(){
   if(!G) return;
   for(const el of G.marked) el.classList.remove("on","pivot");
   G.marked.length = 0;
-  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
+  const endChunk = Math.min(S.index+(S.chunkNow||S.chunk), S.tokens.length);
   for(let k=S.index;k<endChunk;k++){
     const el=G.els[k-ribbonStart];
     if(!el) continue;
@@ -237,6 +257,7 @@ function render(){
   rb.classList.toggle("no-ctx", !settings.context);
   rb.classList.toggle("playing", S.playing);
   if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2) buildRibbon();
+  S.chunkNow = chunkNow();   // one answer per beat: marking, placing and pacing must agree
   markChunk();
   placeRibbon();
 }
@@ -245,7 +266,8 @@ function render(){
 function step(){
   if(S.index>=S.tokens.length){ finish(); return; }   // reached the end
   render();
-  const chunkTokens = S.tokens.slice(S.index, S.index+S.chunk);
+  const n = S.chunkNow || S.chunk;    // render resolved how many words this beat shows
+  const chunkTokens = S.tokens.slice(S.index, S.index+n);
 
   // gentle speed ramp: ease from RAMP_MIN up to full WPM over the first words of a run
   const since = S.index - S.rampStart;
@@ -262,10 +284,10 @@ function step(){
   const longest = Math.max(...chunkTokens.map(t=>t.w.length));
   if(longest>8) delay += perWord*0.25;
   // extra breath at a structural (paragraph/page/chapter) boundary
-  if(sp && isUnitEnd(S.index + S.chunk)) delay += perWord*1.1;
+  if(sp && isUnitEnd(S.index + n)) delay += perWord*1.1;
 
   const prev = S.index;
-  S.index += S.chunk;
+  S.index += n;
   updateProgress(true);
   saveProgress();
 
