@@ -1203,8 +1203,11 @@ function renderLibrary(){
       committed=true;
       if(openLibRow===sw) openLibRow=null;
       face.style.transition=""; face.style.transform="translateX(-105%)";
-      el.style.height=el.offsetHeight+"px";
-      requestAnimationFrame(()=>{ el.classList.add("collapse"); el.style.height="0px"; });
+      // The row is a one-row grid, so folding it shut is one class: 1fr -> 0fr
+      // interpolates on its own. Reading offsetHeight to seed a height animation
+      // forced a synchronous layout in the middle of the delete gesture, which is
+      // the worst moment on a phone to stall for one.
+      el.classList.add("collapse");
       setTimeout(()=>removeItem(item), 230);
     };
     const sw=rowSwipe(el, face, {

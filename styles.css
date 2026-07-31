@@ -298,13 +298,22 @@
   .recent{max-width:680px;margin:36px auto 0;}
   .recent h4{font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;text-align:center;}
   .recent-list{display:flex;flex-direction:column;gap:9px;}
+  /* A grid of one row, so deleting a row can fold it shut by interpolating
+     1fr -> 0fr. The old path animated `height`, which meant JS had to read
+     offsetHeight first (a forced synchronous layout, mid-gesture) and write the
+     pixel value back before it could animate to zero. A fraction interpolates on
+     its own, so the row folds without anyone having to measure it. Where
+     grid-template-rows does not interpolate the row simply snaps shut under the
+     opacity fade, which reads as a dissolve rather than a break. */
   .recent-item{
     position:relative;border-radius:var(--r-sm);border:1px solid var(--hair);overflow:hidden;
+    display:grid;grid-template-rows:1fr;
     -webkit-user-select:none;user-select:none;touch-action:pan-y;
-    transition:border-color var(--t) var(--ease-out),transform var(--t) var(--ease-out),height .22s var(--ease-out),opacity .22s var(--ease-out);
+    transition:border-color var(--t) var(--ease-out),transform var(--t) var(--ease-out),
+               grid-template-rows .22s var(--ease-out),opacity .22s var(--ease-out);
   }
   .recent-item:hover{border-color:var(--amethyst);transform:translateX(3px);}
-  .recent-item.collapse{opacity:0;border-color:transparent;}
+  .recent-item.collapse{grid-template-rows:0fr;opacity:0;border-color:transparent;}
   .recent-item .ri-open,.recent-item .ri-x{touch-action:pan-y;}   /* horizontal stays ours on the whole row */
   .ri-del{
     position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-end;
@@ -315,6 +324,10 @@
   .recent-item.will-delete .ri-del{color:#fff;background:linear-gradient(90deg, rgba(240,166,200,0.12), rgba(240,166,200,0.38));}
   .ri-face{
     position:relative;display:flex;align-items:center;gap:14px;padding:0 16px;
+    /* the grid row is what shrinks; a grid item will not go below its content
+       unless it is told it may, and the overflow is what hides the content as
+       the row closes over it */
+    min-height:0;overflow:hidden;
     background-color:var(--bg-1);background-image:linear-gradient(0deg,var(--surface),var(--surface));
     transition:transform .26s var(--ease-out), background-image var(--t) var(--ease-out);
   }
