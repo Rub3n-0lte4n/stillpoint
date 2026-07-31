@@ -808,8 +808,13 @@
     .reader > .wrap{max-width:none;}
     /* Out of flow and pinned to the viewport, so the reading field is the whole
        screen and the word never shifts when the dock changes height. The wrap
-       keeps flex:1 (inline), so the dock still sits at the bottom. */
-    .stage-shell{position:fixed;inset:0;z-index:0;padding:0;}
+       keeps flex:1 (inline), so the dock still sits at the bottom.
+       NO z-index here. A z-index on a positioned element opens a stacking
+       context, and everything inside is then trapped under whatever the context
+       itself scores — which buried the block card (z-index:30) beneath the top
+       bar and dock (both 20), because the shell scored 0. DOM order already puts
+       the shell behind the chrome; the card needs to get out from under it. */
+    .stage-shell{position:fixed;inset:0;padding:0;}
     .stage{
       width:100%;max-width:none;height:100%;border:none;border-radius:0;box-shadow:none;
       /* the bottom padding raises the flex-centred resting word to the same line
@@ -872,6 +877,16 @@
     .stage .ribbon-clip{
       -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 var(--focal-l,18%),#000 var(--focal-r,82%),transparent 100%);
               mask-image:linear-gradient(90deg,transparent 0,#000 var(--focal-l,18%),#000 var(--focal-r,82%),transparent 100%);
+    }
+
+    /* Full-bleed, the stage shell is the screen, so a flat 14px inset put the
+       card's header under the notch and its actions under the home indicator.
+       These are the physical edges now, so they need the real ones. */
+    .block-card, .page-view, .figindex{
+      inset:calc(env(safe-area-inset-top) + 10px)
+            max(12px, env(safe-area-inset-right))
+            calc(env(safe-area-inset-bottom) + 10px)
+            max(12px, env(safe-area-inset-left));
     }
 
     /* The reader's top bar owns the top of a phone screen, so a transient hint
@@ -1216,9 +1231,11 @@
   @keyframes toastOut{to{opacity:0;transform:translateY(-8px) scale(.98)}}
 
   /* ---------- Phase 2: non-linear block presentation ---------- */
-  /* Overlays sit inside .stage-shell (position:relative), covering the stage. */
+  /* Overlays sit inside .stage-shell (position:relative), covering the stage.
+     They are modal — the only way on is through their own buttons — so they have
+     to clear the reader's chrome (z-index 20), not just the stage. */
   .block-card, .page-view, .figindex{
-    position:absolute;inset:14px;z-index:30;display:flex;flex-direction:column;
+    position:absolute;inset:14px;z-index:40;display:flex;flex-direction:column;
     background:var(--surface);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);
     border:1px solid var(--hair-strong);border-radius:var(--r-lg);box-shadow:var(--e-3), inset 0 1px 0 rgba(255,255,255,0.06);
     padding:18px 20px;animation:doneIn .28s var(--ease-out);overflow:hidden;

@@ -627,6 +627,10 @@ function presentBlock(block, mode){
   $("bcDismiss").classList.toggle("hidden", !isAutoDetected(block));
   $("bcResume").textContent = "Resume reading →";
   $("blockCard").classList.remove("hidden");
+  // The stream is halted but S.playing stays true, so pause() never runs and the
+  // screen lock was being held for as long as the card stood. Put a figure up,
+  // set the phone down, and it would sit awake until the battery said otherwise.
+  releaseWakeLock();
   Haptics.trigger("light");
   $("bcResume").focus({preventScroll:true});
 }
@@ -653,7 +657,7 @@ function continueStream(){
   }
   S.pendingRange = null;
   S.rampStart = S.index;
-  if(S.playing){ S.playStart = Date.now(); armZen(); step(); }
+  if(S.playing){ S.playStart = Date.now(); acquireWakeLock(); armZen(); step(); }
 }
 
 // skip — never interrupt; collect into the appendix + document index.
