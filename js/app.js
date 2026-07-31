@@ -10,6 +10,8 @@ import { THEMES, verifyPatronCode, isPatronTheme, themeById } from "./patron.js"
 import { Streak, GOAL_MIN, GOAL_MAX, GOAL_STEP } from "./streak.js";
 import { stageGestures, sheetDrag, rowSwipe } from "./gestures.js";
 import { Hints } from "./hints.js";
+import { axisFraction, axisFor, capsFor, halvesFor, blockHalves, windowScale, chunkFit,
+         sizingSample, SCALE_FLOOR_PX } from "./field.js";
 import { mergeLibrary, LIB_MAX } from "./library.js";
 import { encryptBackup, decryptBackup, isEncryptedBackup } from "./crypto.js";
 
@@ -24,7 +26,8 @@ const S = {
   index: 0,
   playing: false,
   mode: "orp",
-  chunk: 1,
+  chunk: 1,      // the reader's MAXIMUM words per beat (stored in fp_prefs)
+  chunkNow: 1,   // how many of them actually fit this beat; resolved in render()
   wpm: 400,
   size: 62,
   title: "Untitled",
@@ -115,86 +118,226 @@ let ribbonStart = 0, ribbonLast = -1, ribbonOffset = 0;
 // ribbon with arithmetic and a transform write — the old path forced a
 // synchronous reflow per word (fontSize reset + getBoundingClientRect).
 let G = null;
-let ribbonScaled = false;   // fontSize currently shrunk by the legacy fit path
+// The document's own type size: the words that set it (character-level, so a new
+// layout does not invalidate them) and the scale they resolved to, keyed by the
+// layout that produced it. See sizingSample() for why this is per document and
+// not per window. Only a new document clears the sample; the scale re-derives
+// itself whenever the key changes.
+let docSample = null, docScale = null, docScaleKey = "";
 function invalidateRibbon(){ G = null; ribbonLast = -1; }
+function resetDocSizing(){ docSample = null; docScale = null; docScaleKey = ""; }
+
+const rwHtml = (w, i) => {
+  const oi = orpIndex(w);
+  return `<span class="rw"${i==null?"":` data-i="${i}"`}><span class="rpre">${esc(w.slice(0,oi))}</span>`+
+         `<span class="rpiv">${esc(w[oi]||"")}</span><span class="rpost">${esc(w.slice(oi+1))}</span></span>`;
+};
 
 function buildRibbon(){
   const start = Math.max(0, S.index - 4);
   const end = Math.min(S.tokens.length-1, S.index + 14);
   let html="";
-  for(let k=start;k<=end;k++){
-    const w = S.tokens[k].w, oi = orpIndex(w);
-    html += `<span class="rw" data-i="${k}"><span class="rpre">${esc(w.slice(0,oi))}</span>`+
-            `<span class="rpiv">${esc(w[oi]||"")}</span><span class="rpost">${esc(w.slice(oi+1))}</span></span>`;
-  }
+  for(let k=start;k<=end;k++) html += rwHtml(S.tokens[k].w, k);
   const rb=$("ribbon"); rb.innerHTML=html; ribbonStart=start; ribbonLast=end;
   measureRibbon();
 }
-// Two measurement passes per rebuild: plain, then with every pivot letter bold
-// (the `mb` class). Bold width per word is position-independent, so the two
-// passes are enough to place ANY marking state exactly, without ever measuring
-// again inside the hot loop.
+// Read one row of .rw spans into the geometry cache — the live ribbon window, or
+// the off-screen sizer. Two passes: plain, then with every pivot letter bold (the
+// `mb` class). Bold width per word is position-independent, so the two passes are
+// enough to place ANY marking state exactly, without ever measuring again inside
+// the hot loop.
+// Ink, not boxes. The `.rw` padding is whitespace and may hang off the field; a
+// letter may not. Measuring the padded box is what let ordinary words run off a
+// phone screen.
+function readRow(row){
+  const els=[...row.children];
+  const rowRect = row.getBoundingClientRect();           // pass 1 (plain)
+  const left=[], w=[], preL=[], wPre=[], wPiv=[], wPost=[], inkL=[], inkR=[];
+  for(const el of els){
+    const r=el.getBoundingClientRect();
+    left.push(r.left-rowRect.left); w.push(r.width);
+    const pre=el.firstChild.getBoundingClientRect();
+    const piv=el.children[1].getBoundingClientRect();
+    const post=el.children[2].getBoundingClientRect();
+    preL.push(pre.left-rowRect.left); wPre.push(pre.width);
+    wPiv.push(piv.width); wPost.push(post.width);
+    // a zero-width prefix collapses onto the pivot, so derive the ink span from
+    // the three letter spans rather than trusting the padded element box
+    const l = (pre.width ? pre.left : piv.left) - rowRect.left;
+    inkL.push(l);
+    inkR.push(l + pre.width + piv.width + post.width);
+  }
+  row.classList.add("mb");
+  const wPivB = els.map(el=>el.children[1].getBoundingClientRect().width);  // pass 2 (bold)
+  row.classList.remove("mb");
+  return { els, left, w, preL, wPre, wPiv, wPivB, wPost, inkL, inkR, marked:[], l0: rowRect.left };
+}
+
+// ORP hangs a word off its pivot letter (lopsided); chunk modes centre it as a
+// block (symmetric). Using the pivot halves for a centred mode charges it for an
+// asymmetry it never has, which cost chunk modes about a third of their type size.
+const halvesAt = (m, i) => S.mode==="orp" ? halvesFor(m, i) : blockHalves(m, i, 1, S.mode==="hybrid");
+
+// An off-screen twin of the ribbon, inside the same parent so it inherits exactly
+// the same type. It exists so the document's size can be measured without
+// disturbing the live window's DOM (which holds the element refs `marked` uses).
+function sizerRow(){
+  let el = $("sizer");
+  if(!el){
+    el = document.createElement("div");
+    el.id = "sizer"; el.className = "ribbon sizer"; el.setAttribute("aria-hidden","true");
+    ($("ribbon").parentNode || $("stage")).appendChild(el);
+  }
+  return el;
+}
+
+// Where this document reads, and at what size. Both come from its widest ordinary
+// words (sizingSample) rather than from whatever the current window happens to
+// hold, so the still point is placed once and the type is chosen once — neither
+// moves while you read. Keyed by the layout that produced them, so a resize, a
+// size change or a mode change re-derives them without explicit invalidation.
+function documentField(width, basePx){
+  const key = `${Math.round(width)}|${Math.round(basePx*100)}|${S.mode}`;
+  if(docScale != null && docScaleKey === key) return docScale;
+  if(!docSample) docSample = sizingSample(S.tokens.map(t=>t.w));
+  docScaleKey = key;
+  if(!docSample.length) return (docScale = { axisFrac: axisFraction(
+    getComputedStyle($("stage")).getPropertyValue("--axis-x")), scale: 1 });
+  const el = sizerRow();
+  el.innerHTML = docSample.map(w=>rwHtml(w)).join("");
+  const m = readRow(el);
+  const halves = m.inkL.map((_,i)=>halvesAt(m,i));
+  const axisFrac = axisFor(halves, width);
+  docScale = { axisFrac, scale: windowScale(halves, capsFor(axisFrac, width), basePx) };
+  el.innerHTML = "";
+  return docScale;
+}
+
+// The 3·2·1 counts down on the axis, so the axis has to be settled before the
+// first digit is drawn — otherwise the countdown lands in one place and the first
+// word arrives in another. The sizer is only visibility:hidden (the ribbon at this
+// point is still display:none), so it measures correctly here.
+function primeField(){
+  const stage=$("stage");
+  if(!stage || !S.tokens.length) return;
+  const width = stage.getBoundingClientRect().width || stage.clientWidth || 1;
+  const basePx = parseFloat(getComputedStyle(sizerRow()).fontSize) || 40;
+  stage.style.setProperty("--axis-x", (documentField(width, basePx).axisFrac*100).toFixed(2)+"%");
+}
+
+// Ink, not boxes. The `.rw` padding is whitespace and may hang off the field; a
+// letter may not. Measuring the padded box is what let ordinary words run off a
+// phone screen.
 function measureRibbon(){
   const rb=$("ribbon"), stage=$("stage");
   rb.style.fontSize="";                                  // measure at the base size
   rb.style.transform="translate(0px, -50%)";             // a known frame for the maths
-  ribbonOffset = 0; ribbonScaled = false;
-  const els=[...rb.children];
-  const rbRect = rb.getBoundingClientRect();             // pass 1 (plain)
-  const left=[], w=[], preL=[], wPre=[], wPiv=[];
-  for(const el of els){
-    const r=el.getBoundingClientRect();
-    left.push(r.left-rbRect.left); w.push(r.width);
-    const pr=el.firstChild.getBoundingClientRect();
-    preL.push(pr.left-rbRect.left); wPre.push(pr.width);
-    wPiv.push(el.children[1].getBoundingClientRect().width);
-  }
-  rb.classList.add("mb");
-  const wPivB = els.map(el=>el.children[1].getBoundingClientRect().width);  // pass 2 (bold)
-  rb.classList.remove("mb");
+  ribbonOffset = 0;
+
   const sr = stage.getBoundingClientRect();
-  G = { els, left, w, preL, wPre, wPiv, wPivB, marked:[],
-        l0: rbRect.left, stageC: sr.left + sr.width/2, avail: stage.clientWidth*0.9 };
+  const width = sr.width || stage.clientWidth || 1;
+  const basePx = parseFloat(getComputedStyle(rb).fontSize) || 40;
+
+  // The document places the still point and sets the size. The window may only
+  // ever go lower, and only for a word too long to have been in the sample at all.
+  const doc = documentField(width, basePx);
+  const axisFrac = doc.axisFrac;
+  // Publish it so the halo, guides, gradient and countdown digit all read the same
+  // number the ribbon is placed against. The CSS value is the pre-measurement
+  // default; from here the document's own answer wins.
+  stage.style.setProperty("--axis-x", (axisFrac*100).toFixed(2)+"%");
+
+  // The axis is a fraction of the whole stage — the same reading CSS gives it, so
+  // the pivot lands exactly under the guide ticks. capsFor turns that into the
+  // room available on each side; holding those two apart is what drifted the pivot
+  // off its own guides by up to 4.6px.
+  const caps = capsFor(axisFrac, width);
+  const axisX = sr.left + width*axisFrac;
+  const frame = { axisFrac, caps, basePx, axisX, stageL: sr.left, stageW: width };
+  const winScale = (m, px) => windowScale(m.els.map((_,i)=>halvesAt(m,i)), caps, px);
+
+  G = Object.assign(readRow(rb), frame);
+  let scale = Math.min(doc.scale, winScale(G, basePx));
+
+  // Glyph advances are NOT linear in font size (hinting and rounding), and
+  // letter-spacing is a fixed px that does not scale at all, so a scale derived
+  // from the base measurements is an estimate, not an answer. Shrink, re-measure
+  // the type that will actually be painted, and check the fit again. The residue
+  // is small, so this settles in one or two passes — but it is the difference
+  // between the fit being guaranteed and the fit merely usually holding.
+  for(let pass=0; pass<3 && scale<1; pass++){
+    rb.style.fontSize = (basePx*scale)+"px";
+    G = Object.assign(readRow(rb), frame);
+    const corr = winScale(G, basePx*scale);
+    if(corr >= 0.999) break;                    // fits at the size on screen
+    scale = Math.max(scale*corr, Math.min(1, SCALE_FLOOR_PX/basePx));
+  }
+  if(scale >= 1) rb.style.fontSize = "";
 }
+// How many words this beat actually shows. The reader's chunk is a MAXIMUM: the
+// phrase yields words before the type yields size, so the chosen reading size
+// stays the invariant and the beat length adapts to the screen. ORP is one word
+// by definition and never asks.
+function chunkNow(){
+  if(S.mode==="orp") return 1;
+  if(!G) return S.chunk;
+  const i0 = S.index - ribbonStart;
+  if(i0<0 || i0>=G.inkL.length) return S.chunk;
+  // the cache is measured at the size actually painted, so the caps are the caps
+  return chunkFit(G, i0, S.chunk, G.caps, S.mode==="hybrid");
+}
+
 // Pure placement from the cache. ORP: the current word's bold pivot centre on
-// the stage centre. RSVP/Hybrid: the chunk as an optical block (Hybrid's bold
-// pivots widen it — the widths are known, so the edges are computed, not read).
+// the axis. RSVP/Hybrid: the chunk as an optical block (Hybrid's bold pivots
+// widen it — the widths are known, so the edges are computed, not read).
+// Every cached number was measured at the size the ribbon is actually painted
+// at, so placement is arithmetic and one transform write. No measuring here, no
+// forced reflow.
 function placeRibbon(){
   if(!G) return;
   const rb=$("ribbon");
   const i0 = S.index - ribbonStart;
   if(i0<0 || i0>=G.left.length) return;
-  let anchorRel, width;
+  let anchorRel, inkLrel, inkRrel;
   if(S.mode==="orp"){
     anchorRel = G.preL[i0] + G.wPre[i0] + G.wPivB[i0]/2;
-    width = G.w[i0] + (G.wPivB[i0]-G.wPiv[i0]);
+    inkLrel = G.inkL[i0];
+    inkRrel = G.inkR[i0] + (G.wPivB[i0] - G.wPiv[i0]);   // the amber pivot is bold, so wider
   } else {
-    const last = Math.min(S.index+S.chunk, S.tokens.length) - ribbonStart - 1;
+    const last = Math.min(S.index+(S.chunkNow||S.chunk), S.tokens.length) - ribbonStart - 1;
     const lastC = Math.min(last, G.left.length-1);
-    let shift = 0;
-    if(S.mode==="hybrid") for(let k=i0;k<lastC;k++) shift += G.wPivB[k]-G.wPiv[k];
-    const lastW = S.mode==="hybrid" ? G.w[lastC] + (G.wPivB[lastC]-G.wPiv[lastC]) : G.w[lastC];
-    const lo = G.left[i0], hi = G.left[lastC] + shift + lastW;
-    anchorRel = (lo+hi)/2;
-    width = hi-lo;
+    let grow = 0;
+    if(S.mode==="hybrid") for(let x=i0;x<=lastC;x++) grow += G.wPivB[x]-G.wPiv[x];
+    inkLrel = G.inkL[i0];
+    inkRrel = G.inkR[lastC] + grow;
+    anchorRel = (inkLrel + inkRrel)/2;
   }
-  // rare overflow (a long word on a narrow phone): the legacy measured path
-  // still handles the shrink, exactly as before
-  if(width > G.avail){ fitRibbon(); centerRibbon(); ribbonScaled = !!rb.style.fontSize; return; }
-  if(ribbonScaled){ rb.style.fontSize=""; ribbonScaled=false; }
-  const target = Math.round((G.stageC - G.l0 - anchorRel)*100)/100;
+  const target = Math.round((G.axisX - G.l0 - anchorRel)*100)/100;
   rb.style.transform = `translate(${target}px, -50%)`;
   ribbonOffset = target;
+
+  // Hand the focal word's own edges to the edge dissolve. A fixed clear band
+  // cannot serve both jobs on a phone: wide enough to dissolve a neighbour and it
+  // eats the focal word, narrow enough to spare the word and neighbours are cut
+  // through mid-glyph at the screen edge. Anchoring the mask to the word means it
+  // holds full opacity exactly across the word and ramps out from there, so the
+  // dissolve is longest when there is most room for it. Every number here is
+  // cached, so this stays arithmetic — no measuring, no forced reflow.
+  const stage = $("stage"), base = G.l0 + target - G.stageL;
+  const pad = Math.max(6, G.basePx*0.12);
+  const pct = (px)=> Math.max(0, Math.min(100, (px/G.stageW)*100)).toFixed(2)+"%";
+  stage.style.setProperty("--focal-l", pct(base + inkLrel - pad));
+  stage.style.setProperty("--focal-r", pct(base + inkRrel + pad));
 }
 // Mark the current chunk. ORP anchors the focal word's pivot letter; Hybrid
 // gives EVERY word in the phrase its own amber anchor (landing points for the
-// eye's hops); RSVP stays unaccented. Classes go on before fitRibbon measures,
-// so the bold anchors are part of the measured width.
+// eye's hops); RSVP stays unaccented. The bold-pivot widths are cached, so the
+// anchors are part of the computed width without measuring.
 function markChunk(){
   if(!G) return;
   for(const el of G.marked) el.classList.remove("on","pivot");
   G.marked.length = 0;
-  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
+  const endChunk = Math.min(S.index+(S.chunkNow||S.chunk), S.tokens.length);
   for(let k=S.index;k<endChunk;k++){
     const el=G.els[k-ribbonStart];
     if(!el) continue;
@@ -207,60 +350,6 @@ function markChunk(){
     if(pw && !pw.classList.contains("pivot")){ pw.classList.add("pivot"); if(!G.marked.includes(pw)) G.marked.push(pw); }
   }
 }
-// Snap the ribbon into place — INSTANT (no slide), so the text is stationary
-// for its whole dwell and stays readable at speed. ORP puts the focal letter
-// exactly on the stage centre (the word hangs around it; the eye never moves).
-// RSVP and Hybrid show a phrase, so the phrase itself centres as a block —
-// its optical middle on the centre line, never lopsided by word lengths.
-function centerRibbon(){
-  const rb=$("ribbon"), stage=$("stage");
-  const sr = stage.getBoundingClientRect();
-  let anchor;
-  if(S.mode==="orp"){
-    const piv = rb.querySelector(`.rw[data-i="${S.index}"] .rpiv`);
-    if(!piv) return;
-    const pr = piv.getBoundingClientRect();
-    anchor = pr.left + pr.width/2;
-  } else {
-    const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
-    let left=Infinity, right=-Infinity;
-    for(let k=S.index;k<endChunk;k++){
-      const el=rb.querySelector(`.rw[data-i="${k}"]`);
-      if(!el) continue;
-      const r=el.getBoundingClientRect();
-      if(r.left<left) left=r.left;
-      if(r.right>right) right=r.right;
-    }
-    if(right<=left) return;
-    anchor = (left+right)/2;
-  }
-  const target = Math.round((ribbonOffset + (sr.left+sr.width/2) - anchor)*100)/100;
-  rb.style.transform = `translate(${target}px, -50%)`;
-  ribbonOffset = target;
-}
-// Shrink the focal word only when it would overflow the stage (e.g. long words on a
-// narrow phone) — short words keep the chosen size; long words scale down to stay readable
-// instead of running off the edges into the fade mask.
-function fitRibbon(){
-  const rb=$("ribbon"), stage=$("stage");
-  rb.style.fontSize="";   // back to the CSS-chosen base each step
-  const endChunk = Math.min(S.index+S.chunk, S.tokens.length);
-  let left=Infinity, right=-Infinity;
-  for(let k=S.index;k<endChunk;k++){
-    const el=rb.querySelector(`.rw[data-i="${k}"]`);
-    if(!el) continue;
-    const r=el.getBoundingClientRect();
-    if(r.left<left) left=r.left;
-    if(r.right>right) right=r.right;
-  }
-  if(right<=left) return;
-  const avail = stage.clientWidth * 0.9;       // leave a little breathing room from the edges
-  const wordW = right-left;
-  if(wordW > avail){
-    const base = parseFloat(getComputedStyle(rb).fontSize) || 40;
-    rb.style.fontSize = Math.max(16, base*(avail/wordW)) + "px";
-  }
-}
 // Show the current position: focal word centred & still, neighbours dim alongside for context.
 function render(){
   if(!S.tokens.length || S.index>=S.tokens.length) return;
@@ -270,6 +359,7 @@ function render(){
   rb.classList.toggle("no-ctx", !settings.context);
   rb.classList.toggle("playing", S.playing);
   if(ribbonLast<0 || S.index<ribbonStart || (S.index+S.chunk-1) > ribbonLast-2) buildRibbon();
+  S.chunkNow = chunkNow();   // one answer per beat: marking, placing and pacing must agree
   markChunk();
   placeRibbon();
 }
@@ -278,7 +368,8 @@ function render(){
 function step(){
   if(S.index>=S.tokens.length){ finish(); return; }   // reached the end
   render();
-  const chunkTokens = S.tokens.slice(S.index, S.index+S.chunk);
+  const n = S.chunkNow || S.chunk;    // render resolved how many words this beat shows
+  const chunkTokens = S.tokens.slice(S.index, S.index+n);
 
   // gentle speed ramp: ease from RAMP_MIN up to full WPM over the first words of a run
   const since = S.index - S.rampStart;
@@ -295,10 +386,10 @@ function step(){
   const longest = Math.max(...chunkTokens.map(t=>t.w.length));
   if(longest>8) delay += perWord*0.25;
   // extra breath at a structural (paragraph/page/chapter) boundary
-  if(sp && isUnitEnd(S.index + S.chunk)) delay += perWord*1.1;
+  if(sp && isUnitEnd(S.index + n)) delay += perWord*1.1;
 
   const prev = S.index;
-  S.index += S.chunk;
+  S.index += n;
   updateProgress(true);
   saveProgress();
 
@@ -331,6 +422,7 @@ function play(){
   updateProgress();
   acquireWakeLock();
   armZen();
+  primeField();   // the countdown lands on the axis, so settle the axis first
   if(settings.countdown){
     countdownThenStep();
   } else {
@@ -1224,6 +1316,7 @@ function openReader(tokens, units, title, meta, key, blocks, nav, kind){
   $("reader").classList.add("show");
   if(!(history.state && history.state.sp==="reader")) history.pushState({sp:"reader"}, "");  // so Back returns to the library
   ribbonStart=0; ribbonOffset=0; invalidateRibbon();   // reset the ribbon for the new document
+  resetDocSizing();   // a new book sets its own type size from its own longest words
   updateProgress();
   $("resting").classList.remove("hidden"); $("word").classList.add("hidden"); $("ribbon").classList.add("hidden");
   $("playBtn").focus({preventScroll:true});   // move focus into the reader (route-change focus)
@@ -1599,6 +1692,7 @@ async function restoreBackup(data){
 /* ---------------- controls ---------------- */
 function setMode(m){
   S.mode=m;
+  { const st=$("stage"); if(st) st.dataset.mode=m; }   // CSS switches --axis-x per mode
   document.querySelectorAll("#modeSeg button").forEach(b=>b.classList.toggle("active",b.dataset.mode===m));
   // ORP reads one word by definition, so the chunk control leaves the panel
   // entirely — dimmed-but-selected was the most ambiguous state in the sheet
@@ -1607,7 +1701,8 @@ function setMode(m){
   else if(m==="hybrid"){ if(S.chunk<2) S.chunk=3; chunkCtrl.classList.remove("hidden"); setChunkUI(S.chunk);
     document.querySelector('#chunkSeg button[data-c="1"]').style.display="none"; }
   else { chunkCtrl.classList.remove("hidden"); document.querySelector('#chunkSeg button[data-c="1"]').style.display=""; setChunkUI(S.chunk); }
-  if(!$("ribbon").classList.contains("hidden")) render();   // re-centre if currently showing
+  invalidateRibbon();   // --axis-x moves with the mode, so the cached geometry is stale
+  if(!$("ribbon").classList.contains("hidden")) render();   // re-place if currently showing
 }
 function setChunkUI(c){ document.querySelectorAll("#chunkSeg button").forEach(b=>b.classList.toggle("active",+b.dataset.c===c)); }
 function setWpm(v){
@@ -1980,7 +2075,12 @@ function init(){
     clearTimeout(rzTimer);
     rzTimer=setTimeout(()=>{
       invalidateRibbon();   // stage geometry moved under the cached measurements
-      if($("reader").classList.contains("show") && !$("ribbon").classList.contains("hidden")) render();
+      if(!$("reader").classList.contains("show")) return;
+      // A narrower screen may want the axis somewhere else entirely. Re-derive it
+      // even while the ribbon is hidden, or the guides and the resting word keep
+      // pointing at the old still point until the next beat redraws.
+      primeField();
+      if(!$("ribbon").classList.contains("hidden")) render();
     },120);
   };
   window.addEventListener("resize",onViewportChange);
