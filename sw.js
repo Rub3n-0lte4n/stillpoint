@@ -12,7 +12,7 @@
 
    CACHE_VERSION is derived from the shell files' content — after changing any
    of them run `npm run sw:bump` (CI's sw:check fails otherwise). */
-const CACHE_VERSION = "stillpoint-0ad9d60aa3";
+const CACHE_VERSION = "stillpoint-058761f8ea";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
 // All paths are relative to this file (served from the site root).
