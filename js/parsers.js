@@ -1,5 +1,6 @@
 // In-browser document parsers for PDF and EPUB. Both return {tokens, units, blocks, ...}.
-// pdf.js and JSZip are loaded as global libraries (window.pdfjsLib / window.JSZip).
+// pdf.js and JSZip are loaded on demand as global libraries (window.pdfjsLib /
+// window.JSZip) — see loadVendor below.
 //
 // `blocks` is a sidecar array of non-linear content (tables, images, figures,
 // quotes, code) captured in place so the reader (Phase 2) can present it instead
@@ -11,13 +12,43 @@
 // persisted (Phase 2+ references blocks by id/after, not by carrying pixels).
 import { tokenize } from "./text.js";
 
-// Read through globalThis so the module also imports in a non-browser context
-// (the unit tests exercise the pure helpers below). In the browser this is the
-// same object as before; parsePDF/parseEPUB still need the real libraries.
-const pdfjsLib = globalThis.window?.pdfjsLib;
-const JSZip = globalThis.window?.JSZip;
-// Vendored worker (same version) — keeps PDF parsing working offline.
-if(pdfjsLib?.GlobalWorkerOptions) pdfjsLib.GlobalWorkerOptions.workerSrc = "js/vendor/pdf.worker.min.js";
+/* pdf.js is 320 KB and JSZip 97 KB. They used to be <script defer> tags in the
+   shell, so every visit paid for both — including the majority that paste text or
+   resume a document already in the library. On a phone that is most of the boot
+   budget spent on a code path the session may never take.
+
+   They load on first use instead. The globals stay exactly as they were, so
+   nothing downstream changes, and a pre-existing global (the unit tests install
+   one) is honoured rather than re-fetched. */
+const VENDOR = {
+  pdfjsLib: "js/vendor/pdf.min.js",
+  JSZip:    "js/vendor/jszip.min.js",
+};
+const vendorLoads = new Map();
+function loadVendor(globalName){
+  const w = globalThis.window;
+  if(!w) return Promise.reject(new Error("no window: "+globalName));
+  if(w[globalName]) return Promise.resolve(w[globalName]);
+  if(vendorLoads.has(globalName)) return vendorLoads.get(globalName);
+  const p = new Promise((resolve, reject)=>{
+    const el = document.createElement("script");
+    el.src = VENDOR[globalName];
+    el.async = false;
+    el.onload = ()=> w[globalName] ? resolve(w[globalName])
+                                   : reject(new Error(globalName+" did not define itself"));
+    el.onerror = ()=>{ vendorLoads.delete(globalName); reject(new Error("Couldn't load "+VENDOR[globalName])); };
+    document.head.appendChild(el);
+  });
+  vendorLoads.set(globalName, p);
+  return p;
+}
+async function pdfjs(){
+  const lib = await loadVendor("pdfjsLib");
+  // Vendored worker (same version) — keeps PDF parsing working offline.
+  if(lib?.GlobalWorkerOptions && !lib.GlobalWorkerOptions.workerSrc)
+    lib.GlobalWorkerOptions.workerSrc = "js/vendor/pdf.worker.min.js";
+  return lib;
+}
 
 // EPUB tag → block kind. Only these elements are captured as blocks; everything
 // else descends normally and its text becomes tokens as before.
@@ -196,6 +227,7 @@ export function orderPageItems(items){
 
 /* ---------------- PDF ---------------- */
 export async function parsePDF(file, onProgress = ()=>{}){
+  const pdfjsLib = await pdfjs();   // fetched on first PDF, not on every visit
   const buf = await file.arrayBuffer();
   // isEvalSupported:false mitigates CVE-2024-4367 (arbitrary JS via crafted PDF font handling)
   const pdf = await pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
@@ -299,7 +331,7 @@ async function extractPdfBlocks(page, content){
   const out = [];
   const scale = 2;
   const cache = {};
-  const OPS = pdfjsLib.OPS;
+  const OPS = globalThis.window.pdfjsLib.OPS;   // parsePDF has already loaded it
 
   // --- image XObjects: walk ops tracking the current transform matrix ---
   try{
@@ -557,6 +589,7 @@ async function buildEpubPayload(tag, el, ctx){
 // Parse the EPUB directly: container.xml -> OPF -> manifest + spine -> blocks+text per section.
 // (Direct parsing handles varied folder layouts more reliably than epub.js section loading.)
 export async function parseEPUB(file, onProgress = ()=>{}){
+  const JSZip = await loadVendor("JSZip");   // fetched on first EPUB, not on every visit
   const buf = await file.arrayBuffer();
   let zip;
   try{ zip = await JSZip.loadAsync(buf); }
