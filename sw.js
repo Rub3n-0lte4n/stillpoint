@@ -1,10 +1,18 @@
 /* Stillpoint service worker — makes the app fully usable offline.
-   The app shell + vendored parsers are precached; Google Fonts are cached at
-   runtime. Books are stored locally in IndexedDB (see js/store.js), so once you've
-   opened the app online, both it and your library work with no connection.
+   The app shell is precached; Google Fonts and the vendored parsers are cached at
+   runtime, on first use. Books are stored locally in IndexedDB (see js/store.js),
+   so once you've opened the app online, both it and your library work with no
+   connection.
+
+   The parsers (pdf.js + its worker + JSZip) are 1.5 MB and deliberately NOT in the
+   precache: making every first visit pay 1.5 MB up front to support a file type
+   that session may never open is the wrong trade on cellular. The fetch handler
+   below caches them the first time a PDF or EPUB is actually parsed, so the offline
+   promise still holds for every format you have used.
+
    CACHE_VERSION is derived from the shell files' content — after changing any
    of them run `npm run sw:bump` (CI's sw:check fails otherwise). */
-const CACHE_VERSION = "stillpoint-66dcef1442";
+const CACHE_VERSION = "stillpoint-058761f8ea";
 const FONT_CACHE = "stillpoint-fonts-v1";
 
 // All paths are relative to this file (served from the site root).
@@ -28,9 +36,6 @@ const SHELL = [
   "js/hints.js",
   "js/library.js",
   "js/field.js",
-  "js/vendor/pdf.min.js",
-  "js/vendor/pdf.worker.min.js",
-  "js/vendor/jszip.min.js",
   "favicon.png",
   "apple-touch-icon.png",
   "icon-192.png",

@@ -55,9 +55,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,100..125,200..600;1,100..125,200..600&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
 
 <!-- In-browser parsers, vendored locally (pdf.js 3.11.174 · JSZip 3.10.1) so the app
-     works fully offline. Same-origin, so SRI/crossorigin are unnecessary. -->
-<script src="js/vendor/pdf.min.js" defer></script>
-<script src="js/vendor/jszip.min.js" defer></script>
+     works fully offline. They are NOT loaded here: 417 KB for a code path most
+     sessions never take (pasting text, or resuming a book already in the library)
+     is most of a phone's boot budget spent on nothing. js/parsers.js fetches
+     whichever one it needs on the first PDF or EPUB, and the service worker keeps
+     it from there. Same-origin, so SRI/crossorigin are unnecessary. -->
 
 <link rel="stylesheet" href="styles.css" />
 

@@ -84,7 +84,14 @@ function releaseWakeLock(){ try{ if(wakeLock) wakeLock.release(); }catch(e){} wa
    pause() (any tap, Space, finishing) brings it back. */
 let zenTimer = null;
 function armZen(){ clearTimeout(zenTimer); if(!settings.zen) return; zenTimer = setTimeout(()=>{ if(S.playing && settings.zen) $("reader").classList.add("zen"); }, 1800); }
-function disarmZen(){ clearTimeout(zenTimer); zenTimer = null; $("reader").classList.remove("zen"); }
+function disarmZen(){
+  clearTimeout(zenTimer); zenTimer = null;
+  const wasHidden = $("reader").classList.contains("zen");
+  $("reader").classList.remove("zen");
+  // updateProgress skips its writes while the dock is hidden, so bring the bar,
+  // the clocks and the slider's aria state up to date before they are seen again
+  if(wasHidden && S.tokens.length) updateProgress();
+}
 
 /* one-time home-screen nudge, offered only after the first finished book.
    Queued at finish, shown on the library — a toast over the finish card (or
@@ -367,6 +374,7 @@ function render(){
 /* ---------------- playback loop ---------------- */
 function step(){
   if(S.index>=S.tokens.length){ finish(); return; }   // reached the end
+  const beatStart = Date.now();
   render();
   const n = S.chunkNow || S.chunk;    // render resolved how many words this beat shows
   const chunkTokens = S.tokens.slice(S.index, S.index+n);
@@ -405,7 +413,15 @@ function step(){
       return;
     }
   }
-  S.timer = setTimeout(()=>{ if(S.playing) step(); }, delay);
+  // Schedule against a deadline, not against "now". setTimeout always overshoots
+  // a little, and render() costs a fraction of a millisecond on top; letting each
+  // beat absorb both means the dial says 400 wpm and the reader gets ~390. The
+  // deadline carries the residue forward instead, so the drift cannot accumulate.
+  // Re-baselined whenever it is more than a beat behind (a tab throttle, a long
+  // parse) so recovery is never a burst of instant words.
+  const due = (S.beatDue && beatStart - S.beatDue < delay ? S.beatDue : beatStart) + delay;
+  S.beatDue = due;
+  S.timer = setTimeout(()=>{ if(S.playing) step(); }, Math.max(0, due - Date.now()));
 }
 function play(){
   { const b = $("chapterBeat"); if(b){ b.classList.remove("on"); b.setAttribute("aria-hidden","true"); } }
@@ -415,6 +431,7 @@ function play(){
   // or two, an interruption returns them to the top of the sentence.
   S.index = rewindTarget(S.tokens, S.index, S.pausedAt === null ? NaN : Date.now() - S.pausedAt);
   S.pausedAt = null;
+  S.beatDue = null;   // a fresh run starts its own schedule; never catch up on a pause
   S.playing = true;
   updateGoalWhisper();   // the whisper never coexists with the stream
   $("playIcon").innerHTML = '<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>'; // pause icon
@@ -627,6 +644,10 @@ function presentBlock(block, mode){
   $("bcDismiss").classList.toggle("hidden", !isAutoDetected(block));
   $("bcResume").textContent = "Resume reading →";
   $("blockCard").classList.remove("hidden");
+  // The stream is halted but S.playing stays true, so pause() never runs and the
+  // screen lock was being held for as long as the card stood. Put a figure up,
+  // set the phone down, and it would sit awake until the battery said otherwise.
+  releaseWakeLock();
   Haptics.trigger("light");
   $("bcResume").focus({preventScroll:true});
 }
@@ -653,7 +674,7 @@ function continueStream(){
   }
   S.pendingRange = null;
   S.rampStart = S.index;
-  if(S.playing){ S.playStart = Date.now(); armZen(); step(); }
+  if(S.playing){ S.playStart = Date.now(); acquireWakeLock(); armZen(); step(); }
 }
 
 // skip — never interrupt; collect into the appendix + document index.
@@ -917,7 +938,13 @@ function updateProgress(throttled){
   const span = Math.max(1, seg.end - seg.start);
   const pct = Math.min(100, ((S.index - seg.start)/span)*100);
   const now = Date.now();
-  if(!throttled || now-progressPaintAt>200 || k!==S.curCh){
+  // Zen hides the whole dock 1.8s into playback and keeps it hidden for the rest
+  // of the run, so for almost all of a long session these six writes — two of them
+  // layout-triggering, two of them accessibility-tree churn — paint nothing at
+  // all. disarmZen() calls updateProgress() to catch the bar up before it is seen
+  // again, so skipping while hidden costs nothing.
+  const unseen = throttled && $("reader").classList.contains("zen");
+  if(!unseen && (!throttled || now-progressPaintAt>200 || k!==S.curCh)){
     progressPaintAt = now;
     $("trackFill").style.width = pct+"%";
     $("trackKnob").style.left = pct+"%";
@@ -1203,8 +1230,11 @@ function renderLibrary(){
       committed=true;
       if(openLibRow===sw) openLibRow=null;
       face.style.transition=""; face.style.transform="translateX(-105%)";
-      el.style.height=el.offsetHeight+"px";
-      requestAnimationFrame(()=>{ el.classList.add("collapse"); el.style.height="0px"; });
+      // The row is a one-row grid, so folding it shut is one class: 1fr -> 0fr
+      // interpolates on its own. Reading offsetHeight to seed a height animation
+      // forced a synchronous layout in the middle of the delete gesture, which is
+      // the worst moment on a phone to stall for one.
+      el.classList.add("collapse");
       setTimeout(()=>removeItem(item), 230);
     };
     const sw=rowSwipe(el, face, {
@@ -1732,7 +1762,7 @@ function applyAids(){
 // KEEP IN SYNC with the phone-reader media query in styles.css. Width alone
 // would miss a phone held sideways (852x393), which needs the sheet just as
 // much; pointer:coarse keeps a merely short desktop window on the inline panel.
-const PHONE_MQ = "(max-width:680px), (max-height:560px) and (max-width:1024px) and (pointer:coarse)";
+const PHONE_MQ = "(max-width:680px), (max-height:560px) and (max-width:1024px) and (pointer:coarse) and (orientation:landscape)";
 const sheetMq = window.matchMedia(PHONE_MQ);
 const isSheet = ()=> sheetMq.matches;
 function setSettingsOpen(open){
