@@ -2,6 +2,14 @@
 
 2026-07-30. Approved in conversation before writing.
 
+> **Revised 2026-07-31 — see [§9 Revision](#9-revision-what-the-first-build-got-wrong).**
+> The first build fixed the fit and left the field unpolished. Three of its
+> decisions are superseded: the axis is now derived per document rather than
+> fixed at 33% (§1), the type size belongs to the document rather than to the
+> ribbon window (§3), and the edge dissolve is anchored to the focal word rather
+> than to fixed screen stops (§5). The measurements in those sections describe
+> the superseded build and are kept as the record of how it was reached.
+
 ## Goal
 
 On a phone, ordinary words do not fit the reading field. The user reported it as
@@ -304,3 +312,106 @@ Two consequences worth naming, neither a defect:
   problem. It inherits the corrected predicate and the token defaults only.
 - Migrating saved positions. Nothing about tokenization changes, so positions,
   marks and the chapter ledger are all untouched.
+
+## 9. Revision — what the first build got wrong
+
+2026-07-31. The fit was fixed and the field still read as unpolished. Driving the
+real app on emulated phones and measuring 44 words of varied prose at 390px found
+four things, three of them consequences of one root cause.
+
+### The root cause: a desktop ladder on a phone
+
+S/M/L/XL are 44/62/82/104px, chosen for a stage that is a card on a wide display.
+On a 390px screen M alone wants about 440px of ink for an ordinary word. Every
+mechanism that followed — the shifted axis, the per-window shrink, the vanishing
+dissolve — existed to walk that number back down. None of them addressed it.
+
+That is also the wrong goal. ORP works because the word sits inside the eye's
+span and no saccade is needed. A word painted across the whole glass forces the
+very eye movement the mode exists to remove, so it is worse reading than the same
+word at two-thirds the size, however much "bigger type" sounds like a win.
+
+The phone now carries its own ladder: `--stage-scale:0.66` on the phone
+breakpoint, giving about 29/41/54/69px. Four steps that each fit.
+
+### 1. The type stepped mid-sentence (superseded §3)
+
+`windowScale` sized each 19-word ribbon window by that window's widest word, so
+the size changed every time the window rebuilt. Measured across one 44-word
+passage at 390px: **62px, then 57.1px, then 49.3px** — three sizes, a 26% jump,
+mid-paragraph. The PR reported this as fixed because its own e2e fed the reader
+one sentence on repeat, which gives every window identical words and hides it.
+
+The size now belongs to the document (`sizingSample`, `documentField`). It is
+derived once from the widest *ordinary* words — length capped at the larger of 20
+characters and twice the median, so compound-heavy prose raises its own ceiling
+while one URL cannot shrink a book — and the window may only ever go lower, for a
+token too long to have been in the sample at all.
+
+Measured after: **one size for the whole passage**, at every width tested.
+
+### 2. The axis was a guess charged to every book (supersedes §1)
+
+33% was tuned for the worst case and then applied to all prose. Short words sat
+stranded a third of the way across an otherwise empty screen; the focal word's
+optical centre travelled 102px, 26% of the screen, word to word.
+
+`axisFor` derives it instead. The widest word's halves define a feasible band —
+the axis may sit no further left than its left half needs, no further right than
+its right half needs — and inside that band the most balanced choice is the one
+nearest centre. Prose of ordinary words reads dead centre; the axis slides only
+as far as that book's longest word actually requires. Chunk modes need no special
+case: block halves are symmetric, so the band always contains 0.5.
+
+When nothing fits at any axis, the axis is the one that costs the least type: the
+width split in proportion to the halves, so both allowances run out together.
+Splitting the difference instead starves the narrow side — which is how asking
+for XL could render *smaller* type than asking for L.
+
+Measured after, same passage: axis 44.6% at 430px, 41% at 390px, 34% at 320px,
+50% sideways. Swing down to 82px, and centred on the screen rather than left of it.
+
+### 3. Neighbours were cut through mid-glyph (supersedes §5)
+
+The first build replaced a mask that ate the focal word with one that held full
+opacity from 4% to 96%. On a 390px screen 4% is about 15px — narrower than a
+single glyph — so context words were guillotined at the screen edge instead of
+dissolving.
+
+No fixed pair of stops can do both jobs: wide enough to dissolve a neighbour
+reaches the focal word, narrow enough to spare the focal word cannot dissolve
+anything. So the stops are not fixed. `placeRibbon` publishes the focal word's own
+ink edges as `--focal-l`/`--focal-r` each beat, and the mask holds full opacity
+across exactly that span and ramps to nothing at the screen edge. The ramp is
+longest when there is most room for it, and it can never touch the focal word.
+Both numbers come from the geometry cache, so the hot path stays arithmetic.
+
+### 4. Three smaller things
+
+- **Landscape inherited the portrait axis.** At 844×390 the word sat at 281px
+  with 560px of empty screen beside it. Sideways there is width to spare, so the
+  still point is the centre.
+- **The baseline crossed the type.** Sitting at `--axis` with the word, an
+  edge-to-edge 1px rule drew straight through the x-height of every word — a
+  scratch across the reading line. The guide ticks already mark the axis without
+  touching the words, so the phone drops the baseline.
+- **`--guide-gap` did not scale with the type.** It read `--read-size` raw, so
+  once the phone ladder shrank the type the ticks drifted away from the word.
+
+### Where the axis and the caps disagreed
+
+`--axis-x` is a percentage of the stage box, because that is what CSS resolves it
+against for the guides, the halo and the countdown digit. The fit maths wants the
+room on each side of that axis, which is the same span less the inset — not a
+fraction of the inset field. Holding those two readings apart put the pivot up to
+4.6px off the guide ticks that are supposed to be marking it. `capsFor` now owns
+the conversion, and the pivot rides its own guides at every width.
+
+### Verification
+
+- 34 unit tests in `test/field.test.mjs` (was 20), including that a larger
+  reading size can never render smaller type once the word is the binding
+  constraint.
+- e2e flow C rewritten: varied prose instead of one repeated sentence, walking 48
+  words per size so the ribbon window rebuilds several times, plus a new
+  invariant that the type never resizes mid-document. **64 assertions, all green.**

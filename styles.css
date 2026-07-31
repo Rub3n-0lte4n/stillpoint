@@ -483,6 +483,10 @@
     font-family:"Atkinson Hyperlegible",system-ui,sans-serif;font-weight:400;
     font-size:min(calc(var(--read-size,62px) * var(--stage-scale,1)),13vw);line-height:1;letter-spacing:.5px;
   }
+  /* An off-screen twin of the ribbon. It inherits every type rule above (same
+     class, same parent), so the document's size can be measured on the real font
+     without disturbing the live window's DOM. Never painted, never hit-tested. */
+  .stage .ribbon.sizer{visibility:hidden;pointer-events:none;top:0;transform:none;will-change:auto;}
   .stage .ribbon .rw{display:inline-block;padding:0 .42em;color:var(--ink);opacity:.34;}  /* no transition — instant word swap in every mode */
   .stage .ribbon.playing .rw{opacity:.14;}          /* dim further while reading — less pull on the eye */
   .stage .ribbon .rw.on{opacity:1 !important;}
@@ -799,39 +803,62 @@
          the absolute pieces read from --axis */
       padding:0 0 12vh;
       --axis:44%;
-      /* A centred pivot spends only ~40% of a narrow screen on the side the word
-         actually grows into, so ordinary words ran off the edge. Shifting the
-         still point left buys that width back and the type keeps its chosen size. */
-      --axis-x:33%;
-      --guide-gap:calc(var(--read-size,62px) * 0.62 + 16px);
+      /* The S/M/L/XL ladder (44/62/82/104) is sized for a stage that is a card on
+         a wide display. Forced onto a phone, M alone wants ~440px of ink for an
+         ordinary word — more than the screen — so every long word had to be
+         rescued by shrinking, and the type stepped from window to window. A phone
+         ladder instead: the same four steps, each one that actually fits. The
+         point of ORP is a word inside the eye's span, not a word spanning the
+         glass; a word wider than the screen forces the very saccade this removes. */
+      --stage-scale:0.66;
+      /* Words are lopsided around their pivot (it sits about a third in), so a
+         centred pivot spends only ~40% of a narrow screen on the side the word
+         grows into. The axis shifts left to buy that width back. At phone-native
+         type the shift needed is small — 33% left the field visibly off-balance,
+         with short words stranded far from centre. */
+      --axis-x:42%;
+      --guide-gap:calc(var(--read-size,62px) * var(--stage-scale,1) * 0.62 + 14px);
       background:
         radial-gradient(120% 60% at 50% 0%, var(--stage-sheen), transparent 60%),
         radial-gradient(150% 46% at var(--axis-x) var(--axis), var(--stage-core), var(--stage-edge));
     }
     /* A phrase centres on its own middle and wastes nothing, so only ORP pays the
-       lopsided-pivot cost that the shifted axis buys back. */
+       lopsided-pivot cost that a shifted axis buys back. Once a document has been
+       measured, axisFor reaches the same conclusion on its own — block halves are
+       symmetric, so the feasible band always contains the centre — and writes the
+       real number inline. This is the value the countdown and guides use before
+       that first measurement. */
     .stage[data-mode="rsvp"], .stage[data-mode="hybrid"]{ --axis-x:50%; }
     /* guides frame the word instead of the box: both re-anchor to the focal line
        and scale with the reading size */
     .stage .guide.top{top:calc(var(--axis) - var(--guide-gap) - 24px);bottom:auto;}
     .stage .guide.bot{top:calc(var(--axis) + var(--guide-gap));bottom:auto;}
-    /* the base rule already centres it on the axis; edge-to-edge it would cut the
-       phone in half, so the phone only softens it */
-    .stage .baseline{opacity:.4;}
-    /* The old 12vw ceiling was set for the inset stage and clamped M, L and XL to
-       the same ~47px on a 393px screen — three of the four sizes did nothing. The
-       full-bleed field is wide enough to give the scale back its range; placeRibbon
-       still shrinks any single word that would overrun the screen. */
-    .stage .ribbon{font-size:min(var(--read-size,62px),22vw);}
+    /* Edge-to-edge, at the same height as the type, this drew a 1px rule straight
+       through the x-height of every word — a scratch across the reading line, not
+       a mark under it. The guide ticks above and below already say where the axis
+       is, and they say it without touching the words. */
+    .stage .baseline{display:none;}
+    /* The ticks are the only thing marking the still point on a phone, so they
+       have to read as placed rather than as dust: a little longer, a little
+       softer, and riding closer to the word now that the gap scales with it. */
+    .stage .guide{width:2px;opacity:.55;}
+    .stage .guide.top,.stage .guide.bot{height:30px;}
+    /* The 12vw ceiling was set for the inset stage and clamped M, L and XL to the
+       same ~47px. The ladder carries its own phone scale now (--stage-scale), so
+       this is only a backstop for a very narrow screen. */
+    .stage .ribbon{font-size:min(calc(var(--read-size,62px) * var(--stage-scale,1)),22vw);}
     .stage .ribbon .rw{padding:0 .3em;}
-    /* The mask's only job is to stop a hard cut at the screen edge. It must never
-       touch the focal word, which on a phone can span nearly the whole field: the
-       old stops held full opacity only between 34% and 66%, a 132px band, so an
-       ordinary word had its own ends dissolved. Neighbour context is dimmed by
-       opacity (.14 playing, .34 paused), not by this mask. */
+    /* The dissolve is anchored to the focal word, not to fixed screen stops.
+       Fixed stops cannot serve both jobs at once on a phone: a band wide enough to
+       dissolve a neighbour eats the focal word's own ends, and a band narrow
+       enough to spare the word (4%, about 15px) is thinner than a single glyph, so
+       neighbours were cut through mid-letter at the edge. placeRibbon publishes
+       the focal word's ink edges each beat; the mask holds full opacity across
+       exactly that span and ramps to nothing at the screen edge, so the ramp is
+       longest when there is most room for it. */
     .stage .ribbon-clip{
-      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 4%,#000 96%,transparent 100%);
-              mask-image:linear-gradient(90deg,transparent 0,#000 4%,#000 96%,transparent 100%);
+      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 var(--focal-l,18%),#000 var(--focal-r,82%),transparent 100%);
+              mask-image:linear-gradient(90deg,transparent 0,#000 var(--focal-l,18%),#000 var(--focal-r,82%),transparent 100%);
     }
 
     /* The reader's top bar owns the top of a phone screen, so a transient hint
@@ -962,7 +989,7 @@
      phones whose usable height is reduced by browser toolbars (e.g. iPhone SE). Compresses
      the reader so the stage + the expanded dock fit without overlapping or scrolling. */
   @media (max-height:600px){
-    .stage .ribbon{font-size:min(var(--read-size,62px),22vw,34vh);}
+    .stage .ribbon{font-size:min(calc(var(--read-size,62px) * var(--stage-scale,1)),22vw,34vh);}
     .stage .resting{font-size:21px;}
 
     .scrub{margin-bottom:9px;}
@@ -997,7 +1024,12 @@
   @media (max-height:560px) and (max-width:1024px) and (pointer:coarse){
     .reader-top{position:relative;padding:max(10px, calc(env(safe-area-inset-top) + 6px)) 0 14px;}
     .stage-shell{position:fixed;inset:0;padding:0;}
-    .stage{min-height:0;padding:0 0 8vh;--axis:46%;--guide-gap:calc(var(--read-size,62px) * 0.5 + 12px);}
+    /* Sideways a phone has width to spare — 844px for a word that needs ~320 — so
+       the axis shift that portrait needs is pure imbalance here: it stranded the
+       word a third of the way across with half the screen empty beside it. Held
+       sideways the still point is the centre. */
+    .stage{min-height:0;padding:0 0 8vh;--axis:46%;--axis-x:50%;
+           --guide-gap:calc(var(--read-size,62px) * var(--stage-scale,1) * 0.5 + 12px);}
     .stage .guide.top{top:calc(var(--axis) - var(--guide-gap) - 24px);bottom:auto;}
     .stage .guide.bot{top:calc(var(--axis) + var(--guide-gap));bottom:auto;}
     .dock{padding:14px 0 calc(6px + env(safe-area-inset-bottom));max-height:none;overflow:visible;}
@@ -1011,12 +1043,9 @@
     .tbtn{width:44px;height:44px;}
     .tbtn.play{width:52px;height:52px;}
     .controls.primary{flex:none;margin-top:0;flex-wrap:nowrap;}
-    /* Sideways there is room for two neighbours a side, so the dissolve can be
-       wider than on a portrait phone without ever reaching the focal word. */
-    .stage .ribbon-clip{
-      -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%);
-              mask-image:linear-gradient(90deg,transparent 0,#000 8%,#000 92%,transparent 100%);
-    }
+    /* The focal-anchored dissolve carries over from portrait unchanged: it reads
+       the word's own edges, so the extra width sideways simply becomes a longer
+       ramp without any stop needing to be restated. */
   }
 
   /* ---------- accessibility ---------- */

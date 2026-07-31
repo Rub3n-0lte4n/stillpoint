@@ -223,15 +223,23 @@ async function main() {
        A centred pivot spends only ~40% of a narrow screen on the side a word
        actually grows into, so ordinary words used to run off the edge and get
        eaten by the fade. These are the invariants that must hold instead: no
-       focal letter leaves the field, the pivot sits on --axis-x, and picking a
-       larger size never renders smaller type. */
+       focal letter leaves the field, the pivot sits on --axis-x, picking a larger
+       size never renders smaller type, and the type NEVER changes size while you
+       read — the size belongs to the document, not to the ribbon window that
+       happens to be on screen. */
     console.log("\nflow C — phone field: no ink escapes, the pivot rides the axis");
     const C = await openPage(cdp);
     const setViewport = (w, h) => cdp.send("Emulation.setDeviceMetricsOverride",
       { width: w, height: h, deviceScaleFactor: 2, mobile: true }, C.sessionId);
-    // ordinary English, not exotic: these are the words that broke it
-    const LONG = "The development of understanding between different people takes "
-      + "time and particularly careful information about responsibilities. ";
+    // Ordinary English, and DELIBERATELY VARIED: one sentence on repeat gives every
+    // ribbon window the same words, so a per-window size looks perfectly stable and
+    // the defect hides. Real prose mixes long words with short ones.
+    const LONG = "The development of an extraordinary idea rarely announces itself. "
+      + "It arrives sideways, disguised as an inconvenience, and the responsibilities "
+      + "that follow are unquestionably heavier than anyone anticipated. Between the "
+      + "intention and the implementation there is a distance that no amount of "
+      + "enthusiasm can shorten. Comprehension is not acceleration. A reader who "
+      + "understands nothing quickly has merely wasted time faster. ";
     for (const [w, h] of [[320, 720], [390, 844], [430, 932], [844, 390]]) {
       await setViewport(w, h);
       await C.goto(BASE);
@@ -247,12 +255,14 @@ async function main() {
       for (const mode of ["orp", "rsvp", "hybrid"]) {
         const r = await C.evalIn(`(async()=>{
           document.querySelector('#modeSeg button[data-mode="${mode}"]').click();
-          const out = { worstOverflow: -1e9, worstAxis: 0, sizes: {}, monotonic: true };
+          const out = { worstOverflow: -1e9, worstAxis: 0, sizes: {}, monotonic: true, sizeSteps: 0 };
           for(const s of [44,62,82,104]){
             document.querySelector('#sizeSeg button[data-s="'+s+'"]').click();
             await new Promise(r=>setTimeout(r,90));
             let seen = 0;
-            for(let step=0; step<8; step++){
+            // far enough to cross several ribbon rebuilds (the window is 19 words),
+            // which is the only way a per-window size change can be observed
+            for(let step=0; step<48; step++){
               const stage=document.getElementById("stage");
               const sr=stage.getBoundingClientRect();
               const marked=[...document.querySelectorAll(".rw.on")];
@@ -270,7 +280,10 @@ async function main() {
               }
               if(hi>lo){
                 out.worstOverflow = Math.max(out.worstOverflow, sr.left-lo, hi-sr.right);
-                seen = parseFloat(getComputedStyle(document.getElementById("ribbon")).fontSize);
+                const px = parseFloat(getComputedStyle(document.getElementById("ribbon")).fontSize);
+                // the type must not change size mid-document
+                if(seen && Math.abs(px-seen) > 0.01) out.sizeSteps++;
+                seen = px;
               }
               if("${mode}"==="orp"){
                 const p=document.querySelector(".rw.pivot .rpiv");
@@ -294,6 +307,8 @@ async function main() {
         if (mode === "orp")
           ok(r.worstAxis < 0.6, `${w}x${h} orp: the pivot rides the axis`, `drift ${r.worstAxis.toFixed(2)}px`);
         ok(r.monotonic, `${w}x${h} ${mode}: a larger size never renders smaller`, JSON.stringify(r.sizes));
+        ok(r.sizeSteps === 0, `${w}x${h} ${mode}: the type never resizes mid-document`,
+          `${r.sizeSteps} size change(s) while reading`);
       }
     }
     ok(C.consoleErrors.length === 0, "no console errors in flow C", C.consoleErrors.join(" | ").slice(0, 300));
